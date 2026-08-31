@@ -24,7 +24,11 @@ from __future__ import annotations
 # other silently, which looks like "the recommendations got worse" and is
 # almost impossible to trace back. The pre-spec MVP hit this and solved it the
 # same way (legacy/mvp/analyzer.py CACHE_VERSION).
-FEATURES_VERSION = 1
+# 2: groove stopped folding tempo into an octave and its four dimensions were
+#    rescaled to their measured ranges so each contributes comparably. Vectors
+#    written under v1 are NOT comparable with v2 and must be re-analyzed.
+# 1: initial.
+FEATURES_VERSION = 2
 
 # Which distance is correct for each feature key.
 #
