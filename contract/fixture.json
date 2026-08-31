@@ -1,0 +1,244 @@
+{
+  "tracks": [
+    {
+      "track_id": "2711778",
+      "title": "So What (feat. John Coltrane, Cannonball Adderley & Bill Evans)",
+      "artist": "Miles Davis",
+      "album": "Kind Of Blue (Legacy Edition)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/fb9fbd93db667e24d4f5dee781e83f7d/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/d/4/2/0/d42ba522e8be4541d2224beb3ae4644c.mp3?hdnea=exp=1788214080~acl=/api/1/1/d/4/2/0/d42ba522e8be4541d2224beb3ae4644c.mp3*~data=user_id=0,application_id=42~hmac=5cf75593bf05cfad2419f9d7381f5096a9fe64cda8c8b9bb6e2e74a80a2040ce"
+    },
+    {
+      "track_id": "872356",
+      "title": "Summertime",
+      "artist": "Miles Davis",
+      "album": "Porgy And Bess",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/0b298830ceeddfca22507ba284fe36d1/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/f/6/6/0/f6689b921f8fde15b1c69f7ac0fbcbb0.mp3?hdnea=exp=1788214080~acl=/api/1/1/f/6/6/0/f6689b921f8fde15b1c69f7ac0fbcbb0.mp3*~data=user_id=0,application_id=42~hmac=dbbf48e7554661fcf908fc1ac79fe1b12e7ca067598b85b8bb8e6aeaca198046"
+    },
+    {
+      "track_id": "2711781",
+      "title": "All Blues (feat. John Coltrane, Cannonball Adderley & Bill Evans)",
+      "artist": "Miles Davis",
+      "album": "Kind Of Blue (Legacy Edition)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/fb9fbd93db667e24d4f5dee781e83f7d/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/a/2/d/0/a2db313f3c35437168ba02e50de4bef4.mp3?hdnea=exp=1788214080~acl=/api/1/1/a/2/d/0/a2db313f3c35437168ba02e50de4bef4.mp3*~data=user_id=0,application_id=42~hmac=3730f6824b560cf842f571953c127845da605d58e5f4158c9d02e495ab258411"
+    },
+    {
+      "track_id": "15600317",
+      "title": "Freddie Freeloader (feat. John Coltrane, Cannonball Adderley, Wynton Kelly & Paul Chambers)",
+      "artist": "Miles Davis",
+      "album": "Kind Of Blue",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/88aec77a2c4a8ed8dd3c709a9fe418bc/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/1/3/a/0/13a9b49f747203e24eff4c7afd20d0aa.mp3?hdnea=exp=1788214080~acl=/api/1/1/1/3/a/0/13a9b49f747203e24eff4c7afd20d0aa.mp3*~data=user_id=0,application_id=42~hmac=4a6728e4d9d3ec9af7ecc05822489967f68d7eac81ebff369ead43404c6c0f3d"
+    },
+    {
+      "track_id": "2711782",
+      "title": "Flamenco Sketches (feat. John Coltrane, Cannonball Adderley & Bill Evans)",
+      "artist": "Miles Davis",
+      "album": "Kind Of Blue (Legacy Edition)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/fb9fbd93db667e24d4f5dee781e83f7d/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/5/7/1/0/57174eed03d14166d20d00f85787ec9c.mp3?hdnea=exp=1788214080~acl=/api/1/1/5/7/1/0/57174eed03d14166d20d00f85787ec9c.mp3*~data=user_id=0,application_id=42~hmac=f686848038dae2aaf3e8a3becd9fc57bb19add928c51f50f09f54ee16eca192a"
+    },
+    {
+      "track_id": "911085",
+      "title": "In A Sentimental Mood",
+      "artist": "Duke Ellington",
+      "album": "Duke Ellington & John Coltrane",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4b9b9e345791d561054e471079dc0f2d/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/8/c/9/0/8c92c77eefce419bf771b7a3506af162.mp3?hdnea=exp=1788214081~acl=/api/1/1/8/c/9/0/8c92c77eefce419bf771b7a3506af162.mp3*~data=user_id=0,application_id=42~hmac=106cad0af950a0da5a26e02099fdb318780f5b9014fcd7e2b8f3fb7b1fb1043c"
+    },
+    {
+      "track_id": "911089",
+      "title": "My Little Brown Book",
+      "artist": "Duke Ellington",
+      "album": "Duke Ellington & John Coltrane",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4b9b9e345791d561054e471079dc0f2d/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/0/e/d/0/0ed524ec5fddbd9c4fdd6193068bfc8a.mp3?hdnea=exp=1788214081~acl=/api/1/1/0/e/d/0/0ed524ec5fddbd9c4fdd6193068bfc8a.mp3*~data=user_id=0,application_id=42~hmac=82f899952075d49469a5e3544c2f472d23db5a0f547e88dda89e367ae3b77471"
+    },
+    {
+      "track_id": "3103379",
+      "title": "It Don't Mean a Thing (If It Ain't Got That Swing) (1990 Remaster)",
+      "artist": "Louis Armstrong",
+      "album": "The Great Summit - The Master Tapes",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/56a27ca23ad1001872e0c16b7eeee189/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/a/1/5/0/a15397b31e86397a03359c202ea2a474.mp3?hdnea=exp=1788214081~acl=/api/1/1/a/1/5/0/a15397b31e86397a03359c202ea2a474.mp3*~data=user_id=0,application_id=42~hmac=741fa5fda58823b574489b514232b8a1db7257b95b94e999b20123cd7e4f78bd"
+    },
+    {
+      "track_id": "15471427",
+      "title": "Something to Live For",
+      "artist": "Duke Ellington",
+      "album": "The Duke: The Columbia Years (1927-1962)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/2012c716ecf564b440b28b69ef832dcb/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/f/1/2/0/f12b15e49404f878ba973a2f293797be.mp3?hdnea=exp=1788214081~acl=/api/1/1/f/1/2/0/f12b15e49404f878ba973a2f293797be.mp3*~data=user_id=0,application_id=42~hmac=28597c13182e45de41dce0e1c107cbe9843153993a2471a9a750408973766c15"
+    },
+    {
+      "track_id": "3103372",
+      "title": "Mood Indigo (1990 Remaster)",
+      "artist": "Louis Armstrong",
+      "album": "The Great Summit - The Master Tapes",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/56a27ca23ad1001872e0c16b7eeee189/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/3/f/f/0/3ff90df250129c34f2566344e6171966.mp3?hdnea=exp=1788214081~acl=/api/1/1/3/f/f/0/3ff90df250129c34f2566344e6171966.mp3*~data=user_id=0,application_id=42~hmac=a6803838e704cbbc165c70bcb7a7d2be5397b3b3e8ed36dff37de58b3e778856"
+    },
+    {
+      "track_id": "635327962",
+      "title": "I'll See You in My Dreams",
+      "artist": "Django Reinhardt",
+      "album": "Best of Djangologie",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/611669ff179d5bc2e06d72d69473f98c/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/2/b/4/0/2b47dd707c82852f01cb7a0882b066d3.mp3?hdnea=exp=1788214082~acl=/api/1/1/2/b/4/0/2b47dd707c82852f01cb7a0882b066d3.mp3*~data=user_id=0,application_id=42~hmac=2db96c922a08165a84259e62874f185fa6b660d97a8782eba0c7f28131ebb346"
+    },
+    {
+      "track_id": "79845626",
+      "title": "Minor Swing",
+      "artist": "Django Reinhardt",
+      "album": "The Essential Django Reinhardt",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/b54b473792ec289a891da83dcaed37c1/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/6/e/d/0/6ed8985865afa4c12a9b23b3168a4cd9.mp3?hdnea=exp=1788214082~acl=/api/1/1/6/e/d/0/6ed8985865afa4c12a9b23b3168a4cd9.mp3*~data=user_id=0,application_id=42~hmac=73a02abece9ff53c1f246df126597c60bf88171632653e78955c878033043bb4"
+    },
+    {
+      "track_id": "1160218",
+      "title": "Nuages",
+      "artist": "Django Reinhardt",
+      "album": "Place De Brouck\u00e8re",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/0852cea43d567c9215f70ca02a703af2/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/b/6/4/0/b64c03985e956c556669ff2d5724d381.mp3?hdnea=exp=1788214082~acl=/api/1/1/b/6/4/0/b64c03985e956c556669ff2d5724d381.mp3*~data=user_id=0,application_id=42~hmac=8ec03300cd0a8ac1964dc975a1b0ae186e33d3e08e1a2a3b77321d82d66dc9ad"
+    },
+    {
+      "track_id": "6431303",
+      "title": "Minor Swing",
+      "artist": "Django Reinhardt",
+      "album": "The Rome Sessions (Vol 1 - 1949/ 1950)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/a5365c618a261b099158ebd6b249576e/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/8/d/4/0/8d42a8ca7b7a52746071ea7c526e5d7b.mp3?hdnea=exp=1788214082~acl=/api/1/1/8/d/4/0/8d42a8ca7b7a52746071ea7c526e5d7b.mp3*~data=user_id=0,application_id=42~hmac=54309471e8e730d87c67b055f3a5e338f0d59616f284a2124c07c59dd43fe68b"
+    },
+    {
+      "track_id": "6492873",
+      "title": "Coucou",
+      "artist": "Django Reinhardt",
+      "album": "War Clouds 1940",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/8266824afa9b63f11e91affd8b6057c9/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/1/e/3/0/1e38b7303f86950791073dd2166ad6e4.mp3?hdnea=exp=1788214082~acl=/api/1/1/1/e/3/0/1e38b7303f86950791073dd2166ad6e4.mp3*~data=user_id=0,application_id=42~hmac=7a41d797eded158b08fe8a7001f5d18609a202d6b741b8dcd7d1557ea61295a3"
+    },
+    {
+      "track_id": "671856",
+      "title": "Eventually",
+      "artist": "Ornette Coleman",
+      "album": "The Shape Of Jazz To Come",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4ae4729e870caaa88595b3c2e05b5f35/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/6/9/b/0/69b2229790bcc7bfcf69b9fe5aeeafa8.mp3?hdnea=exp=1788214083~acl=/api/1/1/6/9/b/0/69b2229790bcc7bfcf69b9fe5aeeafa8.mp3*~data=user_id=0,application_id=42~hmac=115edd4ad756aad6bd867a339375a4d84f3afd76dc3879f58505cf834e4e5ffc"
+    },
+    {
+      "track_id": "671852",
+      "title": "Lonely Woman",
+      "artist": "Ornette Coleman",
+      "album": "The Shape Of Jazz To Come",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4ae4729e870caaa88595b3c2e05b5f35/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/7/5/1/0/75141f4cfcb7f6a81de0159de4124619.mp3?hdnea=exp=1788214083~acl=/api/1/1/7/5/1/0/75141f4cfcb7f6a81de0159de4124619.mp3*~data=user_id=0,application_id=42~hmac=dd000b7b702dc7eac9d08d6c3546e6df268cc5e9c53548c3fea92c0e83f26ae5"
+    },
+    {
+      "track_id": "671871",
+      "title": "Congeniality",
+      "artist": "Ornette Coleman",
+      "album": "The Shape Of Jazz To Come",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4ae4729e870caaa88595b3c2e05b5f35/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/f/b/b/0/fbb6db4b8a1f018486d1d933d2cc3619.mp3?hdnea=exp=1788214083~acl=/api/1/1/f/b/b/0/fbb6db4b8a1f018486d1d933d2cc3619.mp3*~data=user_id=0,application_id=42~hmac=690737cb79c75823f03d589fcc93932600cd9c301f6796a699b227a55bd554e4"
+    },
+    {
+      "track_id": "70579369",
+      "title": "What Reason Could I Give",
+      "artist": "Ornette Coleman",
+      "album": "The Complete Science Fiction Sessions",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/af9837dabaebb35b8512d4da73f352fc/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/f/d/2/0/fd2acca269e482b7c15fa5aef5d7af10.mp3?hdnea=exp=1788214083~acl=/api/1/1/f/d/2/0/fd2acca269e482b7c15fa5aef5d7af10.mp3*~data=user_id=0,application_id=42~hmac=3d600e931ba724885f8dc579bcde9f78c74e45aaa6ddf3f1514ebb95a810dfc4"
+    },
+    {
+      "track_id": "671874",
+      "title": "Chronology",
+      "artist": "Ornette Coleman",
+      "album": "The Shape Of Jazz To Come",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4ae4729e870caaa88595b3c2e05b5f35/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/3/6/1/0/361cb6afc8408ba686bff71831e90bbf.mp3?hdnea=exp=1788214083~acl=/api/1/1/3/6/1/0/361cb6afc8408ba686bff71831e90bbf.mp3*~data=user_id=0,application_id=42~hmac=26abf558d70335a5533018d694d0b4aa26c4a6f5e56eafd770eb93f766f0fa4b"
+    },
+    {
+      "track_id": "3099606",
+      "title": "Skating In Central Park",
+      "artist": "Bill Evans",
+      "album": "Undercurrent",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/e95a5290e16691d7390e61677d373abb/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/c/6/0/0/c60cd1a7a58df50e774761e6d88f12e7.mp3?hdnea=exp=1788214084~acl=/api/1/1/c/6/0/0/c60cd1a7a58df50e774761e6d88f12e7.mp3*~data=user_id=0,application_id=42~hmac=1f86ae79c7d16902cc23231812eb58b0c85900f8a45660146432f7592f8c50dc"
+    },
+    {
+      "track_id": "1444366372",
+      "title": "You Must Believe In Spring",
+      "artist": "Bill Evans",
+      "album": "Best Of Bill Evans 1977-1980",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/8da29c7ed092478452ec08759cf37188/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/6/d/f/0/6dfcb550baab6efb416a47a643949d49.mp3?hdnea=exp=1788214084~acl=/api/1/1/6/d/f/0/6dfcb550baab6efb416a47a643949d49.mp3*~data=user_id=0,application_id=42~hmac=274436fe8d892dc041c1ef87df630efcbd0fc4d6268c67143109f0527ab3fff8"
+    },
+    {
+      "track_id": "117304038",
+      "title": "Stella By Starlight",
+      "artist": "Bill Evans",
+      "album": "A Simple Matter Of Conviction",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/b0b97096890a37399cac62813d0d15a9/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/4/e/a/0/4eada1e9c8172cde382d23819cae12f6.mp3?hdnea=exp=1788214084~acl=/api/1/1/4/e/a/0/4eada1e9c8172cde382d23819cae12f6.mp3*~data=user_id=0,application_id=42~hmac=725649e12d0c3f21f1c685bb6c800bc606d0c427346bff1ed143cd153adc2237"
+    },
+    {
+      "track_id": "144941810",
+      "title": "Minha (All Mine) (Live)",
+      "artist": "Bill Evans",
+      "album": "On A Monday Evening (Live)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/4b7899224557392204988f0b6a3a6821/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/8/8/d/0/88dcc7cf10e3f7fda72a55f60cc46b67.mp3?hdnea=exp=1788214084~acl=/api/1/1/8/8/d/0/88dcc7cf10e3f7fda72a55f60cc46b67.mp3*~data=user_id=0,application_id=42~hmac=65a1d594c9a08c3b2977fc9ac7aec5bf7f97df5ddc8c2bbe09853c279c018a2e"
+    },
+    {
+      "track_id": "541622452",
+      "title": "But Beautiful",
+      "artist": "Stan Getz",
+      "album": "Stan Getz & Bill Evans",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/763a3d6ef0fc9ceb822224ee07df6449/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/5/5/0/0/5504b3b1f5787b839923ac79eaded87b.mp3?hdnea=exp=1788214084~acl=/api/1/1/5/5/0/0/5504b3b1f5787b839923ac79eaded87b.mp3*~data=user_id=0,application_id=42~hmac=12f20d285aa10da0b3dcb70e25b12b890c37b685d3481e2ffadf3d912eeaebc7"
+    },
+    {
+      "track_id": "780605202",
+      "title": "O.G.D. (a.k.a. Road Song) (Alternate Version)",
+      "artist": "Jimmy Smith",
+      "album": "Movin\u2019: The Complete Verve Recordings",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/f78488e6cd1e0a55cdf06cfb7588a0df/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/c/3/d/0/c3d5cc391241370d9846bbd0a6864003.mp3?hdnea=exp=1788214087~acl=/api/1/1/c/3/d/0/c3d5cc391241370d9846bbd0a6864003.mp3*~data=user_id=0,application_id=42~hmac=592a6490b073c4752f63de5430d4eefe6038cc56086771027dbfa9024d1df5b7"
+    },
+    {
+      "track_id": "2262474",
+      "title": "C C Rider",
+      "artist": "Jimmy Smith",
+      "album": "Dot Com Blues",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/c21ff916047a83f272c8f14fd631cc88/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/1/4/f/0/14f6d017fb2fcc7f6ffba2fc9efa4604.mp3?hdnea=exp=1788214087~acl=/api/1/1/1/4/f/0/14f6d017fb2fcc7f6ffba2fc9efa4604.mp3*~data=user_id=0,application_id=42~hmac=c90544fe906b5f9d3ae47057be6a9b023187bebddac996c1599bef8f612ebbb7"
+    },
+    {
+      "track_id": "2515289",
+      "title": "The Cat",
+      "artist": "Jimmy Smith",
+      "album": "The Cat",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/f909839b68bcebcf5521fe12a5a42b8f/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/b/c/7/0/bc7709feec617634b2f81eef905fec79.mp3?hdnea=exp=1788214087~acl=/api/1/1/b/c/7/0/bc7709feec617634b2f81eef905fec79.mp3*~data=user_id=0,application_id=42~hmac=3d00b9547e2b062c3248097347a673a3d9e9537f73133900de4926f8e8439cff"
+    },
+    {
+      "track_id": "780593532",
+      "title": "OGD (Road Song)",
+      "artist": "Jimmy Smith",
+      "album": "Talkin' Verve: Roots Of Acid Jazz",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/3ee0095a20b0676c4d0e1660807150e5/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/8/8/7/0/887414206b9caccdd6b136c334fdbb7d.mp3?hdnea=exp=1788214087~acl=/api/1/1/8/8/7/0/887414206b9caccdd6b136c334fdbb7d.mp3*~data=user_id=0,application_id=42~hmac=393b1268b3d18c190f2167cb5b7fc237bf182ae7577c9656c9c5621c54969197"
+    },
+    {
+      "track_id": "3506783",
+      "title": "I Can't Give You Anything But Love (Live At Smalls' Paradise, Harlem, NYC, 1957 / Remastered 1999 / Rudy Van Gelder Edition)",
+      "artist": "Jimmy Smith",
+      "album": "Groovin' At Small's Paradise (Remastered 1999 / Rudy Van Gelder Edition)",
+      "artwork_url": "https://cdn-images.dzcdn.net/images/cover/d713ac08a1c813ef245cdc15575a31fc/250x250-000000-80-0-0.jpg",
+      "preview_url": "https://cdnt-preview.dzcdn.net/api/1/1/b/2/b/0/b2b781e7c9e979648f1559ed20e13e77.mp3?hdnea=exp=1788214087~acl=/api/1/1/b/2/b/0/b2b781e7c9e979648f1559ed20e13e77.mp3*~data=user_id=0,application_id=42~hmac=04ef1176d4b4c34b927f92e6daa73a6ccd1c97697f1d35404d2682d52ef40bc2"
+    }
+  ]
+}

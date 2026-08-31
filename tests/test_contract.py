@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 
 CONTRACT = Path(__file__).resolve().parents[1] / "contract"
@@ -23,3 +24,13 @@ def test_track_fields():
     assert f.TRACK_FIELDS == {
         "track_id", "title", "artist", "album", "artwork_url", "preview_url"
     }
+
+
+def test_fixture_thirty_contract_tracks():
+    f = _features()
+    data = json.loads((CONTRACT / "fixture.json").read_text())
+    assert len(data["tracks"]) == 30
+    for t in data["tracks"]:
+        assert set(t) == f.TRACK_FIELDS
+        assert t["preview_url"].startswith("http")
+        assert isinstance(t["track_id"], str)
