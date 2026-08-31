@@ -57,6 +57,20 @@ class SeedRequest(BaseModel):
     track_id: str
 
 
+@app.get("/")
+def root() -> dict:
+    """Signpost only — not part of the contract."""
+    return {
+        "service": "Essencia",
+        "routes": [
+            "GET /search?q=<query>",
+            "POST /seed {track_id}",
+            "GET /axes",
+            "GET /recommend?track_id=<id>&axis=<axis>&limit=<n>",
+        ],
+    }
+
+
 @app.get("/axes")
 def get_axes() -> dict:
     return {"axes": AXES}

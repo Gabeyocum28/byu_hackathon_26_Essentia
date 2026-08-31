@@ -198,3 +198,11 @@ def test_recommend_works_without_redis(no_redis):
     )
     assert body.status_code == 200
     assert len(body.json()["results"]) == 10
+
+
+# ---- / signpost ----
+
+def test_root_lists_routes(client):
+    body = client.get("/").json()
+    assert "/axes" in str(body)
+    assert "/recommend" in str(body)
