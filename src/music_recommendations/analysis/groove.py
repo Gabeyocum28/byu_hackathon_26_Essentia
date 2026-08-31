@@ -8,20 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 
-
-def groove_vector(mp3_path: Path | str) -> np.ndarray:
+def groove_vector(mp3_path: Path | str) -> "np.ndarray":
     """[bpm, beats_confidence, onset_rate, danceability]"""
-    from essentia.standard import (
-        Danceability,
-        MonoLoader,
-        OnsetRate,
-        RhythmExtractor2013,
-    )
-
-    audio = MonoLoader(filename=str(mp3_path), sampleRate=44100)()
-    bpm, _, beats_conf, _, _ = RhythmExtractor2013(method="multifeature")(audio)
-    onset_rate = float(OnsetRate()(audio)[1])
-    dance = float(Danceability()(audio)[0])
-    return np.array([float(bpm), float(beats_conf), onset_rate, dance])
+    raise NotImplementedError
