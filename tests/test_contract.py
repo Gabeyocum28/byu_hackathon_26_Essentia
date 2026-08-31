@@ -15,7 +15,7 @@ def _features():
 def test_axes_ids_match_spec():
     f = _features()
     assert [a["id"] for a in f.AXES] == [
-        "sounds_like", "mood", "genre", "groove", "surprise"
+        "sounds_like", "mood", "groove", "surprise"
     ]
 
 

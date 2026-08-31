@@ -9,7 +9,6 @@ from __future__ import annotations
 AXIS_FEATURES: dict[str, tuple[str, int]] = {
     "sounds_like": ("embedding", 1),
     "mood":        ("moodtheme", 1),
-    "genre":       ("genre", 1),
     "groove":      ("groove", 1),
     "surprise":    ("embedding", -1),   # most distant by embedding cosine
 }
