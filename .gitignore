@@ -9,8 +9,8 @@ __pycache__/
 .env
 ios/**/xcuserdata/
 
-# legacy MVP derived artifacts
+# legacy MVP derived artifacts (library.json IS committed: it carries the
+# track metadata teammates need to render the graph without Essentia)
 legacy/samples/
-legacy/library.json
 legacy/graph.json
 legacy/sound_connections.html

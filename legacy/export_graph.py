@@ -7,8 +7,11 @@ from pathlib import Path
 
 import numpy as np
 
-from mvp.analyzer import CACHE_VERSION
 from mvp.similarity import camelot, connection
+
+# Mirrors mvp.analyzer.CACHE_VERSION; kept local so rendering the graph
+# needs only numpy, not an Essentia install.
+CACHE_VERSION = 2
 
 ROOT = Path(__file__).parent
 CACHE = ROOT / "cache"
