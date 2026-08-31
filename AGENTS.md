@@ -1,56 +1,51 @@
-# Agent rules — Essentia Music Connections
+# Working agreement
 
-Rules for AI coding agents (Claude Code, Codex, etc.) working in this repo.
-Multiple people + agents work here in parallel, so follow the workflow rules strictly.
+This is a 4-person, 24-hour sprint. Four people are running coding agents
+against this repo at the same time. The full design is
+`Essencia_design_spec.md` — read the section for your lane before coding.
 
-## What this project is
+## Ownership
 
-Audio-based, explainable music recommendations. Deezer's public API (no auth)
-supplies metadata + 30s preview MP3s; Essentia + TensorFlow models extract
-audio features; pure-math scoring connects tracks with human-readable reasons
-(timbre %, tempo compatibility, Camelot key wheel).
+You own exactly ONE of these folders. It was named in your task.
 
-## Commands
+  ios/                                  — the iPhone app
+  src/music_recommendations/server/     — the FastAPI backend
+  src/music_recommendations/corpus/     — the Deezer crawler
+  src/music_recommendations/analysis/   — the Essentia pipeline
 
-```bash
-pip install essentia-tensorflow   # heavy dep; needs Python 3.11
-python3 run_mvp.py                # end-to-end demo: 20-track library + recommendations
-python3 build_library_500.py 120  # bigger library build (arg = track count, default 500)
-python3 export_graph.py           # library.json -> graph.json + sound_connections.html
-python3 -m pytest                 # run all tests
-python3 -m pytest tests/test_similarity.py -k camelot   # run a single test
-```
+You also own the matching folder under tests/ and any script in scripts/
+that drives your lane.
 
-## Architecture (read this before editing)
+Do not create, edit, or delete files outside the folder you own. This
+includes pyproject.toml: if you need a dependency added, ask.
 
-The pipeline is: **fetch → analyze → score → explain/visualize**.
+## contract/ is read-only
 
-- `mvp/deezer.py` — Deezer API client (search, charts, related artists, preview download). No auth needed.
-- `mvp/analyzer.py` — Essentia feature extraction (BPM, key, embeddings, genres, moods). Results cached as JSON in `cache/<track_id>.json`, keyed by `CACHE_VERSION`. **If you change the feature schema, bump `CACHE_VERSION`** — stale entries then recompute automatically.
-- `mvp/similarity.py` — pure scoring math (Camelot wheel, tempo half/double-time, cosine on embeddings). **Deliberately has no I/O and no Essentia imports** so tests stay fast — keep it that way. Score weights live here (`W_EMBEDDING`/`W_BPM`/`W_KEY`).
-- `mvp/recommend.py` — ranking + human-readable explanations.
-- `run_mvp.py`, `build_library_500.py` — library builders (small demo / large chart-based).
-- `export_graph.py` + `graph_template.html` — renders the cached library into `sound_connections.html`.
+Everything in contract/ is shared by four people. Do not edit it.
 
-Generated artifacts (do not hand-edit): `cache/`, `samples/`, `library.json`, `graph.json`, `sound_connections.html`.
+If the contract appears wrong, incomplete, or blocking, STOP and tell the
+human. Do not work around it. Do not add a field. Do not rename anything.
+A contract change requires all four people to agree, and routing around a
+mismatch silently breaks three other people's work.
 
-**`cache/` IS committed on purpose**: it holds the analyzed features + 1280-dim
-embeddings per track, so teammates and agents can score, recommend, and export
-the graph without downloading MP3s or installing Essentia. Commit new/updated
-cache JSONs when you analyze new tracks. Never hand-edit them.
+## Test data
 
-## Hard rules
+contract/fixture.json holds 30 real jazz tracks with real Deezer preview
+URLs. Use it for all testing. Do not invent your own test tracks.
 
-1. **Never commit audio or throwaway artifacts**: `samples/` (MP3s), `__pycache__/`, `library.json`, `graph.json`, `sound_connections.html`. (`cache/` is the exception — see above.)
-2. **Never commit directly to `main`.** Create a feature branch (`<name>/<topic>`) and open a PR.
-3. **Run `python3 -m pytest` before committing.** All tests must pass. New scoring/similarity logic needs tests in `tests/`.
-4. Essentia may not be installed on every machine. Code in `mvp/similarity.py` and `mvp/recommend.py` must stay importable and testable without Essentia; only `mvp/analyzer.py` may import it.
-5. Be polite to the Deezer API: keep the existing caching and sleep/backoff patterns when adding fetch code.
-6. Don't re-download or re-analyze tracks unnecessarily — check `cache/` first (that's what `analyze_track` already does; go through it).
-7. Keep commits small and messages descriptive; several agents work here concurrently and unreadable history multiplies merge pain.
+## Scope
 
-## Style
+This is a 24-hour sprint. Build what is asked, nothing more. No profile
+screens, no explanation text, no accounts, no persistence beyond Redis,
+no deployment config. If you think something extra is needed, ask.
 
-- Python 3.11, standard library + numpy + essentia only — don't add dependencies without asking the humans.
-- Module docstrings explain *what* each file extracts/computes — keep them updated when behavior changes.
-- Match the existing style: type hints, `from __future__ import annotations`, module-level constants for tunables.
+## legacy/ is frozen
+
+legacy/ holds the pre-spec MVP. Copy from it if useful; never import it,
+never edit it.
+
+## Merging
+
+Commit and push small changes often. Do not sit on large diffs. Never
+commit directly to main; branch as <name>/<topic> and open a PR. Run
+`python3 -m pytest` before committing.
