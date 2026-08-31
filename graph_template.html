@@ -1,0 +1,418 @@
+<title>Sound Connections</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+  :root {
+    color-scheme: dark;
+    --ground: #101216;
+    --panel: #181b21;
+    --panel-2: #1e222a;
+    --hairline: #262b33;
+    --ink: #f2f3f5;
+    --ink-2: #9aa1ad;
+    --ink-3: #666e7a;
+    --g-electronic: #3987e5;
+    --g-rock: #d95926;
+    --g-jazz: #199e70;
+    --g-hiphop: #c98500;
+    --g-pop: #d55181;
+    --g-folk: #9085e9;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 14px/1.5 "IBM Plex Sans", system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #stage { position: fixed; inset: 0; width: 100vw; height: 100vh; cursor: grab; }
+  #stage:active { cursor: grabbing; }
+
+  .hud {
+    position: fixed;
+    background: color-mix(in srgb, var(--panel) 86%, transparent);
+    backdrop-filter: blur(8px);
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+  }
+
+  #masthead { top: 18px; left: 18px; padding: 14px 18px 12px; max-width: 330px; }
+  #masthead h1 {
+    margin: 0;
+    font-family: "Bricolage Grotesque", "IBM Plex Sans", sans-serif;
+    font-size: 24px; font-weight: 700; letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  #masthead p { margin: 4px 0 0; color: var(--ink-2); font-size: 12.5px; }
+
+  #controls { top: 18px; right: 18px; padding: 12px 16px; width: 240px; transition: right 0.25s ease; }
+  body.panel-open #controls { right: 378px; }
+  @media (prefers-reduced-motion: reduce) { #controls { transition: none; } }
+  #controls label {
+    display: block; font-family: "IBM Plex Mono", monospace;
+    font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-2); margin-bottom: 6px;
+  }
+  #controls .row { display: flex; align-items: center; gap: 10px; }
+  #threshold { flex: 1; accent-color: var(--g-electronic); }
+  #thresholdVal {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px;
+    font-variant-numeric: tabular-nums; min-width: 34px; text-align: right;
+  }
+  #edgeCount { margin-top: 6px; color: var(--ink-3); font-size: 11.5px; }
+
+  #legend { bottom: 18px; left: 18px; padding: 12px 16px; }
+  #legend .title {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);
+    margin-bottom: 8px;
+  }
+  #legend .items { display: flex; flex-direction: column; gap: 5px; }
+  .legend-item {
+    display: flex; align-items: center; gap: 8px;
+    background: none; border: none; padding: 2px 4px; border-radius: 6px;
+    color: var(--ink); font: 12.5px "IBM Plex Sans", sans-serif;
+    cursor: pointer; text-align: left;
+  }
+  .legend-item:hover { background: var(--panel-2); }
+  .legend-item:focus-visible { outline: 2px solid var(--g-electronic); }
+  .legend-item.off { opacity: 0.35; }
+  .legend-item .swatch { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+
+  /* Detail panel */
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: 360px;
+    background: var(--panel);
+    border-left: 1px solid var(--hairline);
+    transform: translateX(100%);
+    transition: transform 0.25s ease;
+    overflow-y: auto;
+    padding: 20px 22px 28px;
+    z-index: 5;
+  }
+  #panel.open { transform: translateX(0); }
+  @media (prefers-reduced-motion: reduce) { #panel { transition: none; } }
+  #panel .close {
+    position: absolute; top: 12px; right: 12px;
+    background: var(--panel-2); border: 1px solid var(--hairline);
+    color: var(--ink-2); width: 28px; height: 28px; border-radius: 8px;
+    cursor: pointer; font-size: 14px; line-height: 1;
+  }
+  #panel .close:hover { color: var(--ink); }
+  #panel .close:focus-visible { outline: 2px solid var(--g-electronic); }
+  #panel .group-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);
+  }
+  #panel .group-chip .swatch { width: 9px; height: 9px; border-radius: 50%; }
+  #panel h2 {
+    margin: 8px 0 2px;
+    font-family: "Bricolage Grotesque", sans-serif;
+    font-size: 21px; font-weight: 700; letter-spacing: -0.015em;
+    text-wrap: balance;
+  }
+  #panel .artist { color: var(--ink-2); margin: 0 0 14px; font-size: 14px; }
+  .stat-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+  .stat {
+    background: var(--panel-2); border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 7px 11px; flex: 1; min-width: 72px;
+  }
+  .stat .k {
+    font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3);
+  }
+  .stat .v {
+    font-family: "IBM Plex Mono", monospace; font-size: 15px;
+    font-variant-numeric: tabular-nums; margin-top: 1px;
+  }
+  #panel .tags { color: var(--ink-3); font-size: 12px; margin: 0 0 18px; }
+  #panel .conn-title {
+    font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+    letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-2);
+    border-top: 1px solid var(--hairline); padding-top: 14px; margin-bottom: 10px;
+  }
+  .conn {
+    background: var(--panel-2); border: 1px solid var(--hairline);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 8px;
+    cursor: pointer;
+  }
+  .conn:hover { border-color: var(--ink-3); }
+  .conn .head { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .conn .name { font-weight: 600; font-size: 13px; }
+  .conn .score {
+    font-family: "IBM Plex Mono", monospace; font-size: 13px;
+    font-variant-numeric: tabular-nums;
+  }
+  .bars { display: grid; grid-template-columns: 44px 1fr 30px; gap: 3px 8px; margin: 8px 0 6px; align-items: center; }
+  .bars .bk {
+    font-family: "IBM Plex Mono", monospace; font-size: 9.5px;
+    text-transform: uppercase; letter-spacing: 0.06em; color: var(--ink-3);
+  }
+  .bars .track { height: 4px; background: var(--hairline); border-radius: 2px; overflow: hidden; }
+  .bars .fill { height: 100%; border-radius: 2px; }
+  .bars .bv {
+    font-family: "IBM Plex Mono", monospace; font-size: 10px;
+    font-variant-numeric: tabular-nums; color: var(--ink-2); text-align: right;
+  }
+  .conn .reasons { margin: 6px 0 0; padding-left: 16px; color: var(--ink-2); font-size: 11.5px; }
+  .conn .reasons li { margin-bottom: 2px; }
+  #panel a { color: var(--g-electronic); font-size: 12.5px; }
+
+  /* Edge tooltip */
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10;
+    background: var(--panel); border: 1px solid var(--hairline);
+    border-radius: 8px; padding: 9px 12px; max-width: 280px;
+    font-size: 12px; display: none; box-shadow: 0 6px 24px rgba(0,0,0,0.5);
+  }
+  #tip .pair { font-weight: 600; margin-bottom: 3px; }
+  #tip .score { font-family: "IBM Plex Mono", monospace; color: var(--ink-2); }
+  #tip ul { margin: 5px 0 0; padding-left: 15px; color: var(--ink-2); }
+
+  svg text {
+    font-family: "IBM Plex Sans", sans-serif;
+    fill: var(--ink-2); font-size: 10.5px;
+    paint-order: stroke; stroke: var(--ground); stroke-width: 3px;
+    pointer-events: none;
+  }
+  svg text.artist-label { font-weight: 600; fill: var(--ink); }
+</style>
+
+<svg id="stage"></svg>
+
+<div class="hud" id="masthead">
+  <h1>Sound Connections</h1>
+  <p>20 Deezer previews analyzed with Essentia — every edge is an audio-computed
+  connection: timbre, tempo, and key. Click a track; hover an edge for the why.</p>
+</div>
+
+<div class="hud" id="controls">
+  <label for="threshold">Connection strength &ge;</label>
+  <div class="row">
+    <input type="range" id="threshold" min="0.30" max="0.65" step="0.01" value="0.42">
+    <span id="thresholdVal">0.42</span>
+  </div>
+  <div id="edgeCount"></div>
+</div>
+
+<div class="hud" id="legend">
+  <div class="title">Genre (from audio tags)</div>
+  <div class="items" id="legendItems"></div>
+</div>
+
+<aside id="panel" aria-label="Track details">
+  <button class="close" aria-label="Close panel">&times;</button>
+  <div id="panelBody"></div>
+</aside>
+
+<div id="tip"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script>
+const DATA = __GRAPH_DATA__;
+
+const GROUP_COLOR = {
+  "Electronic": "#3987e5",
+  "Rock & Indie": "#d95926",
+  "Jazz & Instrumental": "#199e70",
+  "Hip-Hop & R&B": "#c98500",
+  "Pop": "#d55181",
+  "Folk & Soul": "#9085e9",
+};
+
+const nodeById = new Map(DATA.nodes.map(n => [n.id, n]));
+const hiddenGroups = new Set();
+let threshold = 0.42;
+let selectedId = null;
+
+// Node size: Deezer popularity rank -> radius.
+const rankExtent = d3.extent(DATA.nodes, n => n.rank);
+const rScale = d3.scaleSqrt().domain(rankExtent).range([9, 20]);
+
+const svg = d3.select("#stage");
+const W = () => window.innerWidth, H = () => window.innerHeight;
+const root = svg.append("g");
+
+svg.call(d3.zoom().scaleExtent([0.4, 3]).on("zoom", e => root.attr("transform", e.transform)));
+
+const linkLayer = root.append("g");
+const nodeLayer = root.append("g");
+const labelLayer = root.append("g");
+
+const sim = d3.forceSimulation(DATA.nodes)
+  .force("charge", d3.forceManyBody().strength(-420))
+  .force("center", d3.forceCenter(W() / 2, H() / 2))
+  .force("collide", d3.forceCollide(d => rScale(d.rank) + 26))
+  .force("x", d3.forceX(W() / 2).strength(0.05))
+  .force("y", d3.forceY(H() / 2).strength(0.07));
+
+let linkSel, nodeSel, labelSel;
+
+function visibleEdges() {
+  return DATA.edges.filter(e =>
+    e.score >= threshold &&
+    !hiddenGroups.has(nodeById.get(idOf(e.source)).group) &&
+    !hiddenGroups.has(nodeById.get(idOf(e.target)).group));
+}
+const idOf = x => typeof x === "object" ? x.id : x;
+
+const tip = document.getElementById("tip");
+function showTip(e, edge) {
+  const a = nodeById.get(idOf(edge.source)), b = nodeById.get(idOf(edge.target));
+  tip.innerHTML =
+    `<div class="pair">${a.artist} &harr; ${b.artist}</div>` +
+    `<div class="score">connection ${edge.score.toFixed(2)} &middot; sound ${edge.sound.toFixed(2)} / tempo ${edge.tempo.toFixed(2)} / key ${edge.key.toFixed(2)}</div>` +
+    (edge.reasons.length ? `<ul>${edge.reasons.map(r => `<li>${r}</li>`).join("")}</ul>` : "");
+  tip.style.display = "block";
+  const x = Math.min(e.clientX + 14, window.innerWidth - 300);
+  const y = Math.min(e.clientY + 14, window.innerHeight - tip.offsetHeight - 14);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+function render(alpha = 0.6) {
+  const edges = visibleEdges();
+  document.getElementById("edgeCount").textContent =
+    `${edges.length} of ${DATA.edges.length} connections shown`;
+
+  linkSel = linkLayer.selectAll("line").data(edges, e => idOf(e.source) + "-" + idOf(e.target));
+  linkSel.exit().remove();
+  linkSel = linkSel.enter().append("line")
+    .attr("stroke-linecap", "round")
+    .on("mousemove", (ev, d) => showTip(ev, d))
+    .on("mouseleave", hideTip)
+    .merge(linkSel)
+    .attr("stroke", "#3d4450")
+    .attr("stroke-opacity", d => 0.25 + 0.75 * (d.score - 0.3) / 0.42)
+    .attr("stroke-width", d => 1 + 7 * Math.max(0, d.score - 0.35));
+
+  const nodes = DATA.nodes.filter(n => !hiddenGroups.has(n.group));
+  nodeSel = nodeLayer.selectAll("circle").data(nodes, n => n.id);
+  nodeSel.exit().remove();
+  nodeSel = nodeSel.enter().append("circle")
+    .attr("stroke-width", 2)
+    .style("cursor", "pointer")
+    .on("click", (ev, d) => select(d.id))
+    .call(d3.drag()
+      .on("start", (ev, d) => { if (!ev.active) sim.alphaTarget(0.25).restart(); d.fx = d.x; d.fy = d.y; })
+      .on("drag", (ev, d) => { d.fx = ev.x; d.fy = ev.y; })
+      .on("end", (ev, d) => { if (!ev.active) sim.alphaTarget(0); d.fx = null; d.fy = null; }))
+    .merge(nodeSel)
+    .attr("r", d => rScale(d.rank))
+    .attr("fill", d => GROUP_COLOR[d.group])
+    .attr("fill-opacity", 0.9)
+    .attr("stroke", d => d.id === selectedId ? "#f2f3f5" : "#101216");
+
+  labelSel = labelLayer.selectAll("g").data(nodes, n => n.id);
+  labelSel.exit().remove();
+  const gEnter = labelSel.enter().append("g");
+  gEnter.append("text").attr("class", "artist-label");
+  gEnter.append("text").attr("class", "title-label").attr("dy", 12);
+  labelSel = gEnter.merge(labelSel);
+  labelSel.select(".artist-label").text(d => d.artist);
+  labelSel.select(".title-label").text(d => d.title.length > 26 ? d.title.slice(0, 25) + "…" : d.title);
+
+  sim.nodes(nodes);
+  sim.force("link", d3.forceLink(edges).id(n => n.id)
+    .distance(d => 90 + 260 * (0.72 - d.score))
+    .strength(d => 0.3 + 0.9 * Math.max(0, d.score - 0.35)));
+  // Only reheat the layout when the graph structure changed; selection
+  // changes restyle in place so the map doesn't reshuffle under a click.
+  if (alpha > 0) sim.alpha(alpha).restart();
+  ticked();
+}
+
+function ticked() {
+  linkSel.attr("x1", d => d.source.x).attr("y1", d => d.source.y)
+         .attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+  nodeSel.attr("cx", d => d.x).attr("cy", d => d.y);
+  labelSel.attr("transform", d => `translate(${d.x + rScale(d.rank) + 5},${d.y - 1})`);
+}
+sim.on("tick", ticked);
+
+// ---- Detail panel ----
+const panel = document.getElementById("panel");
+const panelBody = document.getElementById("panelBody");
+document.querySelector("#panel .close").addEventListener("click", () => select(null));
+
+function barRow(label, value, color) {
+  return `<span class="bk">${label}</span>` +
+    `<span class="track"><span class="fill" style="width:${Math.round(value * 100)}%;background:${color}"></span></span>` +
+    `<span class="bv">${value.toFixed(2)}</span>`;
+}
+
+function select(id) {
+  selectedId = id;
+  if (id === null) {
+    panel.classList.remove("open");
+    document.body.classList.remove("panel-open");
+    render(0);
+    return;
+  }
+  const n = nodeById.get(id);
+  const conns = DATA.edges
+    .filter(e => idOf(e.source) === id || idOf(e.target) === id)
+    .sort((a, b) => b.score - a.score).slice(0, 6);
+  const color = GROUP_COLOR[n.group];
+  panelBody.innerHTML =
+    `<span class="group-chip"><span class="swatch" style="background:${color}"></span>${n.group}</span>` +
+    `<h2>${n.title}</h2><p class="artist">${n.artist}</p>` +
+    `<div class="stat-row">` +
+      `<div class="stat"><div class="k">BPM</div><div class="v">${n.bpm.toFixed(0)}</div></div>` +
+      `<div class="stat"><div class="k">Key</div><div class="v">${n.key} ${n.scale === "major" ? "maj" : "min"}</div></div>` +
+      `<div class="stat"><div class="k">Camelot</div><div class="v">${n.camelot}</div></div>` +
+    `</div>` +
+    `<p class="tags">audio tags: ${n.tags.join(", ")}</p>` +
+    `<div class="conn-title">Strongest connections</div>` +
+    conns.map(e => {
+      const other = nodeById.get(idOf(e.source) === id ? idOf(e.target) : idOf(e.source));
+      return `<div class="conn" data-id="${other.id}">` +
+        `<div class="head"><span class="name">${other.artist} — ${other.title.length > 24 ? other.title.slice(0, 23) + "…" : other.title}</span>` +
+        `<span class="score">${e.score.toFixed(2)}</span></div>` +
+        `<div class="bars">${barRow("sound", e.sound, color)}${barRow("tempo", e.tempo, color)}${barRow("key", e.key, color)}</div>` +
+        (e.reasons.length ? `<ul class="reasons">${e.reasons.map(r => `<li>${r}</li>`).join("")}</ul>` : "") +
+        `</div>`;
+    }).join("") +
+    `<p><a href="${n.link}" target="_blank" rel="noopener">Listen on Deezer &nearr;</a></p>`;
+  panelBody.querySelectorAll(".conn").forEach(el =>
+    el.addEventListener("click", () => select(Number(el.dataset.id))));
+  panel.classList.add("open");
+  document.body.classList.add("panel-open");
+  render(0);
+}
+
+// ---- Legend ----
+const legendItems = document.getElementById("legendItems");
+Object.entries(GROUP_COLOR).forEach(([group, color]) => {
+  const count = DATA.nodes.filter(n => n.group === group).length;
+  const btn = document.createElement("button");
+  btn.className = "legend-item";
+  btn.innerHTML = `<span class="swatch" style="background:${color}"></span>${group} <span style="color:var(--ink-3)">(${count})</span>`;
+  btn.addEventListener("click", () => {
+    hiddenGroups.has(group) ? hiddenGroups.delete(group) : hiddenGroups.add(group);
+    btn.classList.toggle("off");
+    if (selectedId && hiddenGroups.has(nodeById.get(selectedId).group)) select(null);
+    render();
+  });
+  legendItems.appendChild(btn);
+});
+
+// ---- Threshold ----
+const slider = document.getElementById("threshold");
+slider.addEventListener("input", () => {
+  threshold = Number(slider.value);
+  document.getElementById("thresholdVal").textContent = threshold.toFixed(2);
+  render(0.4);
+});
+
+window.addEventListener("resize", () => {
+  sim.force("center", d3.forceCenter(W() / 2, H() / 2));
+  sim.force("x", d3.forceX(W() / 2).strength(0.05));
+  sim.force("y", d3.forceY(H() / 2).strength(0.07));
+  sim.alpha(0.3).restart();
+});
+
+render();
+</script>

@@ -1,0 +1,1242 @@
+[
+  {
+    "id": 3129775,
+    "title": "Around the World",
+    "artist": "Daft Punk",
+    "artist_id": 27,
+    "album": "Homework",
+    "duration": 429,
+    "rank": 830730,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/a/4/7/0/a47dbed01e6d9b0ac4e39a134f745ca2.mp3?hdnea=exp=1788205417~acl=/api/1/1/a/4/7/0/a47dbed01e6d9b0ac4e39a134f745ca2.mp3*~data=user_id=0,application_id=42~hmac=393d8de75d82a86e89e6d38455aa8570c799adb71f039c56ecd16cb9df5dfeee",
+    "link": "https://www.deezer.com/track/3129775",
+    "features": {
+      "bpm": 121.30084228515625,
+      "key": "G",
+      "scale": "major",
+      "key_confidence": 0.8335884809494019,
+      "danceability": 3.2719380855560303,
+      "rms": 0.22195595502853394,
+      "tags": [
+        [
+          "dance",
+          0.3614
+        ],
+        [
+          "pop",
+          0.3192
+        ],
+        [
+          "electronic",
+          0.2746
+        ],
+        [
+          "House",
+          0.1922
+        ],
+        [
+          "electro",
+          0.1068
+        ],
+        [
+          "rock",
+          0.0808
+        ],
+        [
+          "funk",
+          0.0763
+        ],
+        [
+          "electronica",
+          0.0707
+        ],
+        [
+          "female vocalists",
+          0.0631
+        ],
+        [
+          "indie",
+          0.0629
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 10284907,
+    "title": "Genesis",
+    "artist": "Justice",
+    "artist_id": 6404,
+    "album": "Justice",
+    "duration": 235,
+    "rank": 677429,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/3/8/d/0/38d8556174477f6d9bce3dde1a125753.mp3?hdnea=exp=1788205418~acl=/api/1/1/3/8/d/0/38d8556174477f6d9bce3dde1a125753.mp3*~data=user_id=0,application_id=42~hmac=63a289955281c43fa2bb3dd90cf4e592c89e7ded7fcbd1a76df959753b8c6c96",
+    "link": "https://www.deezer.com/track/10284907",
+    "features": {
+      "bpm": 117.07855224609375,
+      "key": "D",
+      "scale": "major",
+      "key_confidence": 0.7671745419502258,
+      "danceability": 1.661621332168579,
+      "rms": 0.24076640605926514,
+      "tags": [
+        [
+          "electronic",
+          0.6112
+        ],
+        [
+          "electro",
+          0.4164
+        ],
+        [
+          "electronica",
+          0.1512
+        ],
+        [
+          "dance",
+          0.1058
+        ],
+        [
+          "indie",
+          0.1025
+        ],
+        [
+          "experimental",
+          0.0783
+        ],
+        [
+          "House",
+          0.0625
+        ],
+        [
+          "alternative",
+          0.0481
+        ],
+        [
+          "rock",
+          0.0475
+        ],
+        [
+          "indie rock",
+          0.0347
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 908604612,
+    "title": "Blinding Lights",
+    "artist": "The Weeknd",
+    "artist_id": 4050205,
+    "album": "After Hours",
+    "duration": 200,
+    "rank": 984833,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/1/b/2/0/1b27825bf63c36edcdc7fac9f920214e.mp3?hdnea=exp=1788205418~acl=/api/1/1/1/b/2/0/1b27825bf63c36edcdc7fac9f920214e.mp3*~data=user_id=0,application_id=42~hmac=73e1995f4a781d16eac988b1de6ac7b040da1806cde18a088aa5cd358ede029b",
+    "link": "https://www.deezer.com/track/908604612",
+    "features": {
+      "bpm": 85.39486694335938,
+      "key": "F",
+      "scale": "minor",
+      "key_confidence": 0.9124410152435303,
+      "danceability": 1.3772358894348145,
+      "rms": 0.3132036626338959,
+      "tags": [
+        [
+          "electronic",
+          0.3345
+        ],
+        [
+          "pop",
+          0.2724
+        ],
+        [
+          "dance",
+          0.1563
+        ],
+        [
+          "female vocalists",
+          0.0934
+        ],
+        [
+          "electronica",
+          0.0802
+        ],
+        [
+          "indie",
+          0.0786
+        ],
+        [
+          "rnb",
+          0.0733
+        ],
+        [
+          "electro",
+          0.0724
+        ],
+        [
+          "rock",
+          0.0712
+        ],
+        [
+          "80s",
+          0.0602
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 1124841682,
+    "title": "Levitating",
+    "artist": "Dua Lipa",
+    "artist_id": 8706544,
+    "album": "Future Nostalgia",
+    "duration": 203,
+    "rank": 902185,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/9/c/5/0/9c570bc806fc277bb73ba024e956d057.mp3?hdnea=exp=1788205418~acl=/api/1/1/9/c/5/0/9c570bc806fc277bb73ba024e956d057.mp3*~data=user_id=0,application_id=42~hmac=d9bfe28cd5d3d20062e78f86cffe2ffa24fe51c22e4af66783e7feeeefc285a2",
+    "link": "https://www.deezer.com/track/1124841682",
+    "features": {
+      "bpm": 102.7568359375,
+      "key": "B",
+      "scale": "minor",
+      "key_confidence": 0.915787398815155,
+      "danceability": 1.1161245107650757,
+      "rms": 0.3021981716156006,
+      "tags": [
+        [
+          "pop",
+          0.3565
+        ],
+        [
+          "rnb",
+          0.1353
+        ],
+        [
+          "dance",
+          0.1268
+        ],
+        [
+          "soul",
+          0.1208
+        ],
+        [
+          "female vocalists",
+          0.1023
+        ],
+        [
+          "Hip-Hop",
+          0.1005
+        ],
+        [
+          "rock",
+          0.0642
+        ],
+        [
+          "country",
+          0.0625
+        ],
+        [
+          "funk",
+          0.0624
+        ],
+        [
+          "90s",
+          0.0468
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 128846783,
+    "title": "Hurt",
+    "artist": "Johnny Cash",
+    "artist_id": 405,
+    "album": "American IV: The Man Comes Around",
+    "duration": 216,
+    "rank": 806548,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/c/b/8/0/cb843caafa1fe392684ac04f198e8a98.mp3?hdnea=exp=1788205419~acl=/api/1/1/c/b/8/0/cb843caafa1fe392684ac04f198e8a98.mp3*~data=user_id=0,application_id=42~hmac=6ae1ddb87cc62496cf745eab4a0b55b09350b67828abe1cea18216afe4228505",
+    "link": "https://www.deezer.com/track/128846783",
+    "features": {
+      "bpm": 90.64569854736328,
+      "key": "G",
+      "scale": "major",
+      "key_confidence": 0.9059497117996216,
+      "danceability": 1.0065851211547852,
+      "rms": 0.14080679416656494,
+      "tags": [
+        [
+          "folk",
+          0.2269
+        ],
+        [
+          "country",
+          0.2244
+        ],
+        [
+          "rock",
+          0.2216
+        ],
+        [
+          "indie",
+          0.1652
+        ],
+        [
+          "acoustic",
+          0.1581
+        ],
+        [
+          "alternative",
+          0.1021
+        ],
+        [
+          "pop",
+          0.0543
+        ],
+        [
+          "indie rock",
+          0.0457
+        ],
+        [
+          "alternative rock",
+          0.0456
+        ],
+        [
+          "Mellow",
+          0.0441
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 98975170,
+    "title": "Tennessee Whiskey",
+    "artist": "Chris Stapleton",
+    "artist_id": 343290,
+    "album": "Traveller",
+    "duration": 293,
+    "rank": 795848,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/1/2/6/0/126803e10fa06c8583e07e8f9fddb1b3.mp3?hdnea=exp=1788205422~acl=/api/1/1/1/2/6/0/126803e10fa06c8583e07e8f9fddb1b3.mp3*~data=user_id=0,application_id=42~hmac=786121671b42c36b576e1c22f95af1a6ceeb6c58e6ba834dad098e63eeac99a4",
+    "link": "https://www.deezer.com/track/98975170",
+    "features": {
+      "bpm": 150.951904296875,
+      "key": "A",
+      "scale": "major",
+      "key_confidence": 0.8467510938644409,
+      "danceability": 1.1282552480697632,
+      "rms": 0.16114258766174316,
+      "tags": [
+        [
+          "rock",
+          0.3455
+        ],
+        [
+          "blues",
+          0.1421
+        ],
+        [
+          "pop",
+          0.1102
+        ],
+        [
+          "indie",
+          0.1013
+        ],
+        [
+          "alternative",
+          0.0962
+        ],
+        [
+          "classic rock",
+          0.0898
+        ],
+        [
+          "country",
+          0.0882
+        ],
+        [
+          "female vocalists",
+          0.0804
+        ],
+        [
+          "soul",
+          0.0658
+        ],
+        [
+          "folk",
+          0.0634
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 1543592472,
+    "title": "Smells Like Teen Spirit (Live In Del Mar, California/1991)",
+    "artist": "Nirvana",
+    "artist_id": 415,
+    "album": "Nevermind (30th Anniversary Super Deluxe)",
+    "duration": 289,
+    "rank": 531221,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/3/d/2/0/3d2a3f27ac62143f8204d1b81cac2ae7.mp3?hdnea=exp=1788205422~acl=/api/1/1/3/d/2/0/3d2a3f27ac62143f8204d1b81cac2ae7.mp3*~data=user_id=0,application_id=42~hmac=1df4b55060f37eeb6ebc9a5c2c2ab77537d4c5ba351dfb8272679065f204a710",
+    "link": "https://www.deezer.com/track/1543592472",
+    "features": {
+      "bpm": 129.00418090820312,
+      "key": "F",
+      "scale": "minor",
+      "key_confidence": 0.8282185196876526,
+      "danceability": 1.6608153581619263,
+      "rms": 0.26871970295906067,
+      "tags": [
+        [
+          "hard rock",
+          0.4672
+        ],
+        [
+          "rock",
+          0.4622
+        ],
+        [
+          "heavy metal",
+          0.3309
+        ],
+        [
+          "metal",
+          0.1832
+        ],
+        [
+          "classic rock",
+          0.1345
+        ],
+        [
+          "punk",
+          0.0945
+        ],
+        [
+          "alternative rock",
+          0.0664
+        ],
+        [
+          "alternative",
+          0.0599
+        ],
+        [
+          "80s",
+          0.0484
+        ],
+        [
+          "Progressive rock",
+          0.0328
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 70322130,
+    "title": "Do I Wanna Know?",
+    "artist": "Arctic Monkeys",
+    "artist_id": 1182,
+    "album": "AM",
+    "duration": 272,
+    "rank": 931645,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/f/3/8/0/f380e7e1a00cd0149000196d2cef3f4c.mp3?hdnea=exp=1788205423~acl=/api/1/1/f/3/8/0/f380e7e1a00cd0149000196d2cef3f4c.mp3*~data=user_id=0,application_id=42~hmac=f7d048570792e43f4172f3e7900d12af5769a385dd5e357a51d1db19632b6737",
+    "link": "https://www.deezer.com/track/70322130",
+    "features": {
+      "bpm": 84.51097106933594,
+      "key": "G",
+      "scale": "minor",
+      "key_confidence": 0.8452379703521729,
+      "danceability": 1.2559008598327637,
+      "rms": 0.18434442579746246,
+      "tags": [
+        [
+          "rock",
+          0.2942
+        ],
+        [
+          "indie",
+          0.1775
+        ],
+        [
+          "blues",
+          0.1238
+        ],
+        [
+          "alternative",
+          0.1225
+        ],
+        [
+          "classic rock",
+          0.0792
+        ],
+        [
+          "pop",
+          0.0772
+        ],
+        [
+          "indie rock",
+          0.0731
+        ],
+        [
+          "folk",
+          0.0631
+        ],
+        [
+          "alternative rock",
+          0.0563
+        ],
+        [
+          "soul",
+          0.0554
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 2711778,
+    "title": "So What (feat. John Coltrane, Cannonball Adderley & Bill Evans)",
+    "artist": "Miles Davis",
+    "artist_id": 1910,
+    "album": "Kind Of Blue (Legacy Edition)",
+    "duration": 562,
+    "rank": 606738,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/d/4/2/0/d42ba522e8be4541d2224beb3ae4644c.mp3?hdnea=exp=1788205423~acl=/api/1/1/d/4/2/0/d42ba522e8be4541d2224beb3ae4644c.mp3*~data=user_id=0,application_id=42~hmac=403eb3ae6c6aa6c9554c6be18c867f5fdd1dab26c5803b404df923202ab07616",
+    "link": "https://www.deezer.com/track/2711778",
+    "features": {
+      "bpm": 135.2421417236328,
+      "key": "C",
+      "scale": "minor",
+      "key_confidence": 0.662674605846405,
+      "danceability": 1.1927839517593384,
+      "rms": 0.043256163597106934,
+      "tags": [
+        [
+          "jazz",
+          0.9381
+        ],
+        [
+          "instrumental",
+          0.0431
+        ],
+        [
+          "female vocalists",
+          0.0349
+        ],
+        [
+          "easy listening",
+          0.0204
+        ],
+        [
+          "blues",
+          0.0184
+        ],
+        [
+          "oldies",
+          0.0155
+        ],
+        [
+          "soul",
+          0.0135
+        ],
+        [
+          "rock",
+          0.0117
+        ],
+        [
+          "guitar",
+          0.0091
+        ],
+        [
+          "pop",
+          0.0067
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 3155839,
+    "title": "Don't Know Why",
+    "artist": "Norah Jones",
+    "artist_id": 810,
+    "album": "Don't Know Why",
+    "duration": 184,
+    "rank": 796380,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/5/0/5/0/505ac2cc16183dd63353736a145d042f.mp3?hdnea=exp=1788205423~acl=/api/1/1/5/0/5/0/505ac2cc16183dd63353736a145d042f.mp3*~data=user_id=0,application_id=42~hmac=46e078c3d7d11fd4ee4e02edf0f82525b64ce57623f7f7939f31d5f73d206331",
+    "link": "https://www.deezer.com/track/3155839",
+    "features": {
+      "bpm": 88.24724578857422,
+      "key": "Bb",
+      "scale": "major",
+      "key_confidence": 0.8682005405426025,
+      "danceability": 0.8525011539459229,
+      "rms": 0.1248588040471077,
+      "tags": [
+        [
+          "female vocalists",
+          0.3564
+        ],
+        [
+          "jazz",
+          0.3134
+        ],
+        [
+          "country",
+          0.1761
+        ],
+        [
+          "pop",
+          0.1172
+        ],
+        [
+          "soul",
+          0.0956
+        ],
+        [
+          "oldies",
+          0.0853
+        ],
+        [
+          "folk",
+          0.0737
+        ],
+        [
+          "rock",
+          0.0474
+        ],
+        [
+          "female vocalist",
+          0.0463
+        ],
+        [
+          "easy listening",
+          0.0451
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 530300641,
+    "title": "Three Little Birds",
+    "artist": "Bob Marley & The Wailers",
+    "artist_id": 719,
+    "album": "Legend - The Best Of Bob Marley And The Wailers",
+    "duration": 183,
+    "rank": 924174,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/f/6/5/0/f6598530e2b027c128eb9706f48481bc.mp3?hdnea=exp=1788205424~acl=/api/1/1/f/6/5/0/f6598530e2b027c128eb9706f48481bc.mp3*~data=user_id=0,application_id=42~hmac=988435f05988d756d7c7777e18864bd5a1f0fea4a06cc9ddd9fecbbf15789284",
+    "link": "https://www.deezer.com/track/530300641",
+    "features": {
+      "bpm": 148.1180877685547,
+      "key": "A",
+      "scale": "major",
+      "key_confidence": 0.8607404232025146,
+      "danceability": 1.2214080095291138,
+      "rms": 0.15380389988422394,
+      "tags": [
+        [
+          "soul",
+          0.448
+        ],
+        [
+          "funk",
+          0.1639
+        ],
+        [
+          "pop",
+          0.1139
+        ],
+        [
+          "rnb",
+          0.1015
+        ],
+        [
+          "rock",
+          0.0877
+        ],
+        [
+          "70s",
+          0.0704
+        ],
+        [
+          "jazz",
+          0.0685
+        ],
+        [
+          "blues",
+          0.0603
+        ],
+        [
+          "80s",
+          0.0503
+        ],
+        [
+          "classic rock",
+          0.042
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 350171311,
+    "title": "HUMBLE.",
+    "artist": "Kendrick Lamar",
+    "artist_id": 525046,
+    "album": "DAMN.",
+    "duration": 177,
+    "rank": 814414,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/5/9/c/0/59c7208affd26e5d728f03dd312dc4cd.mp3?hdnea=exp=1788205424~acl=/api/1/1/5/9/c/0/59c7208affd26e5d728f03dd312dc4cd.mp3*~data=user_id=0,application_id=42~hmac=3d1d830525c46ea4d4a55604d426abb9563b92f1252d315f6cfa82133fd4d6f5",
+    "link": "https://www.deezer.com/track/350171311",
+    "features": {
+      "bpm": 150.10658264160156,
+      "key": "Ab",
+      "scale": "major",
+      "key_confidence": 0.7563828229904175,
+      "danceability": 1.13273286819458,
+      "rms": 0.35585591197013855,
+      "tags": [
+        [
+          "Hip-Hop",
+          0.8338
+        ],
+        [
+          "rnb",
+          0.1136
+        ],
+        [
+          "soul",
+          0.0324
+        ],
+        [
+          "pop",
+          0.0284
+        ],
+        [
+          "rock",
+          0.0273
+        ],
+        [
+          "00s",
+          0.0254
+        ],
+        [
+          "alternative",
+          0.0195
+        ],
+        [
+          "indie",
+          0.0157
+        ],
+        [
+          "male vocalists",
+          0.0153
+        ],
+        [
+          "chill",
+          0.0146
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 1109731,
+    "title": "Lose Yourself",
+    "artist": "Eminem",
+    "artist_id": 13,
+    "album": "Curtain Call: The Hits",
+    "duration": 326,
+    "rank": 980436,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/2/7/a/0/27a14827ff1e82c5e40e8b6a934a8637.mp3?hdnea=exp=1788205424~acl=/api/1/1/2/7/a/0/27a14827ff1e82c5e40e8b6a934a8637.mp3*~data=user_id=0,application_id=42~hmac=cf3e837b1d74d65c265801872646557736eb45b74eaac8860aad4807b8c3e034",
+    "link": "https://www.deezer.com/track/1109731",
+    "features": {
+      "bpm": 85.70073699951172,
+      "key": "D",
+      "scale": "minor",
+      "key_confidence": 0.8303146362304688,
+      "danceability": 1.5158107280731201,
+      "rms": 0.2535085082054138,
+      "tags": [
+        [
+          "Hip-Hop",
+          0.75
+        ],
+        [
+          "rock",
+          0.0617
+        ],
+        [
+          "electronic",
+          0.0443
+        ],
+        [
+          "rnb",
+          0.0364
+        ],
+        [
+          "alternative",
+          0.0291
+        ],
+        [
+          "indie",
+          0.0279
+        ],
+        [
+          "soul",
+          0.0236
+        ],
+        [
+          "dance",
+          0.0225
+        ],
+        [
+          "00s",
+          0.0212
+        ],
+        [
+          "pop",
+          0.0187
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 6524423,
+    "title": "Time",
+    "artist": "Hans Zimmer",
+    "artist_id": 1935,
+    "album": "Inception (Music from the Motion Picture)",
+    "duration": 275,
+    "rank": 808896,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/5/8/e/0/58ef1a65db803c83560c1597bccb7b4f.mp3?hdnea=exp=1788205425~acl=/api/1/1/5/8/e/0/58ef1a65db803c83560c1597bccb7b4f.mp3*~data=user_id=0,application_id=42~hmac=f508962155aef4e28bb2be5b470a7bc9ce62b1791dc6df708ddec781b6e54813",
+    "link": "https://www.deezer.com/track/6524423",
+    "features": {
+      "bpm": 125.75035858154297,
+      "key": "G",
+      "scale": "major",
+      "key_confidence": 0.7647226452827454,
+      "danceability": 1.0620558261871338,
+      "rms": 0.08089181035757065,
+      "tags": [
+        [
+          "ambient",
+          0.3954
+        ],
+        [
+          "electronic",
+          0.1934
+        ],
+        [
+          "instrumental",
+          0.1442
+        ],
+        [
+          "experimental",
+          0.1104
+        ],
+        [
+          "chillout",
+          0.0738
+        ],
+        [
+          "rock",
+          0.0671
+        ],
+        [
+          "electronica",
+          0.058
+        ],
+        [
+          "jazz",
+          0.0567
+        ],
+        [
+          "Progressive rock",
+          0.0515
+        ],
+        [
+          "alternative",
+          0.0381
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 3097275,
+    "title": "Bach, JS: Cello Suite No. 1 in G Major, BWV 1007: I. Prelude",
+    "artist": "Mstislav Rostropovich",
+    "artist_id": 68069,
+    "album": "Bach: Cello Suites Nos. 1, 4 & 5",
+    "duration": 124,
+    "rank": 717325,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/9/e/e/0/9ee9d485a9d5824dad9fa10bfecdf6af.mp3?hdnea=exp=1788205425~acl=/api/1/1/9/e/e/0/9ee9d485a9d5824dad9fa10bfecdf6af.mp3*~data=user_id=0,application_id=42~hmac=40d1b84fcac287b9204ba8f147146cfdcd014e4a510f1afb5031cbc0a3586bd6",
+    "link": "https://www.deezer.com/track/3097275",
+    "features": {
+      "bpm": 114.72956848144531,
+      "key": "D",
+      "scale": "major",
+      "key_confidence": 0.8231829404830933,
+      "danceability": 1.0235170125961304,
+      "rms": 0.060783956199884415,
+      "tags": [
+        [
+          "jazz",
+          0.3862
+        ],
+        [
+          "instrumental",
+          0.1926
+        ],
+        [
+          "folk",
+          0.1229
+        ],
+        [
+          "blues",
+          0.0654
+        ],
+        [
+          "rock",
+          0.0606
+        ],
+        [
+          "Progressive rock",
+          0.0552
+        ],
+        [
+          "female vocalists",
+          0.0433
+        ],
+        [
+          "experimental",
+          0.036
+        ],
+        [
+          "ambient",
+          0.0335
+        ],
+        [
+          "guitar",
+          0.0333
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 15781392,
+    "title": "Bangarang (feat. Sirah)",
+    "artist": "Skrillex",
+    "artist_id": 525643,
+    "album": "Bangarang EP",
+    "duration": 215,
+    "rank": 699102,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/f/7/c/0/f7c4c40890cf027d6e0e02a2ba006329.mp3?hdnea=exp=1788205426~acl=/api/1/1/f/7/c/0/f7c4c40890cf027d6e0e02a2ba006329.mp3*~data=user_id=0,application_id=42~hmac=8e4b0d40205a80c6ad3968d007b08632cdd4e9f7f6e412189c5b0742608b3482",
+    "link": "https://www.deezer.com/track/15781392",
+    "features": {
+      "bpm": 109.83212280273438,
+      "key": "G",
+      "scale": "minor",
+      "key_confidence": 0.8465704917907715,
+      "danceability": 1.3502577543258667,
+      "rms": 0.3798397481441498,
+      "tags": [
+        [
+          "electronic",
+          0.2884
+        ],
+        [
+          "Hip-Hop",
+          0.2695
+        ],
+        [
+          "dance",
+          0.1861
+        ],
+        [
+          "electro",
+          0.1566
+        ],
+        [
+          "pop",
+          0.0982
+        ],
+        [
+          "electronica",
+          0.0587
+        ],
+        [
+          "rnb",
+          0.0547
+        ],
+        [
+          "House",
+          0.0507
+        ],
+        [
+          "indie",
+          0.0493
+        ],
+        [
+          "rock",
+          0.0477
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 70266756,
+    "title": "Wake Me Up",
+    "artist": "Avicii",
+    "artist_id": 293585,
+    "album": "True",
+    "duration": 249,
+    "rank": 921155,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/9/3/a/0/93a023759118ca2f5bc17c7c0c07ba1b.mp3?hdnea=exp=1788205426~acl=/api/1/1/9/3/a/0/93a023759118ca2f5bc17c7c0c07ba1b.mp3*~data=user_id=0,application_id=42~hmac=93d9e18004ea132ec5c92a634feef546e9454ccace039b1b2e623c2a8ce9edc2",
+    "link": "https://www.deezer.com/track/70266756",
+    "features": {
+      "bpm": 123.90436553955078,
+      "key": "D",
+      "scale": "major",
+      "key_confidence": 0.9353340268135071,
+      "danceability": 1.3182742595672607,
+      "rms": 0.25255316495895386,
+      "tags": [
+        [
+          "rock",
+          0.2847
+        ],
+        [
+          "pop",
+          0.201
+        ],
+        [
+          "indie",
+          0.1158
+        ],
+        [
+          "alternative",
+          0.0944
+        ],
+        [
+          "electronic",
+          0.0876
+        ],
+        [
+          "80s",
+          0.0795
+        ],
+        [
+          "soul",
+          0.0672
+        ],
+        [
+          "dance",
+          0.0537
+        ],
+        [
+          "alternative rock",
+          0.0492
+        ],
+        [
+          "indie rock",
+          0.0444
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 1174603092,
+    "title": "Someone Like You",
+    "artist": "Adele",
+    "artist_id": 75798,
+    "album": "21",
+    "duration": 285,
+    "rank": 672662,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/c/f/6/0/cf61cfa01f653ad6b8696a81c6e4d747.mp3?hdnea=exp=1788205426~acl=/api/1/1/c/f/6/0/cf61cfa01f653ad6b8696a81c6e4d747.mp3*~data=user_id=0,application_id=42~hmac=3de16362c8b545c44d3bbbd117e42dbf923580a93b7b71a8ae94f0fd0f46b234",
+    "link": "https://www.deezer.com/track/1174603092",
+    "features": {
+      "bpm": 135.65354919433594,
+      "key": "F#",
+      "scale": "minor",
+      "key_confidence": 0.869081974029541,
+      "danceability": 1.043960690498352,
+      "rms": 0.18318790197372437,
+      "tags": [
+        [
+          "female vocalists",
+          0.3707
+        ],
+        [
+          "pop",
+          0.2003
+        ],
+        [
+          "folk",
+          0.1928
+        ],
+        [
+          "indie",
+          0.1299
+        ],
+        [
+          "rock",
+          0.1291
+        ],
+        [
+          "acoustic",
+          0.0966
+        ],
+        [
+          "alternative",
+          0.0811
+        ],
+        [
+          "country",
+          0.0522
+        ],
+        [
+          "beautiful",
+          0.0481
+        ],
+        [
+          "female vocalist",
+          0.0477
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 655095912,
+    "title": "bad guy",
+    "artist": "Billie Eilish",
+    "artist_id": 9635624,
+    "album": "WHEN WE ALL FALL ASLEEP, WHERE DO WE GO?",
+    "duration": 194,
+    "rank": 932130,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/b/5/2/0/b528e07441caa4883c8d1c4b746bf47c.mp3?hdnea=exp=1788205428~acl=/api/1/1/b/5/2/0/b528e07441caa4883c8d1c4b746bf47c.mp3*~data=user_id=0,application_id=42~hmac=0993bf8d0be5c69e248066a5fc5238ba6bb55bbf6b540c67b1aaf932e7bc9fe7",
+    "link": "https://www.deezer.com/track/655095912",
+    "features": {
+      "bpm": 135.28851318359375,
+      "key": "G",
+      "scale": "minor",
+      "key_confidence": 0.8222444653511047,
+      "danceability": 0.9654902815818787,
+      "rms": 0.3040961027145386,
+      "tags": [
+        [
+          "electronic",
+          0.3038
+        ],
+        [
+          "Hip-Hop",
+          0.1509
+        ],
+        [
+          "female vocalists",
+          0.1236
+        ],
+        [
+          "rnb",
+          0.12
+        ],
+        [
+          "electronica",
+          0.0924
+        ],
+        [
+          "chillout",
+          0.082
+        ],
+        [
+          "soul",
+          0.0778
+        ],
+        [
+          "experimental",
+          0.076
+        ],
+        [
+          "pop",
+          0.0695
+        ],
+        [
+          "ambient",
+          0.0677
+        ]
+      ],
+      "embedding": null
+    }
+  },
+  {
+    "id": 63480987,
+    "title": "Dreams (2004 Remaster)",
+    "artist": "Fleetwood Mac",
+    "artist_id": 169,
+    "album": "Rumours",
+    "duration": 257,
+    "rank": 907653,
+    "preview": "https://cdnt-preview.dzcdn.net/api/1/1/9/f/3/0/9f3c661f9f58a75fe6e7aeb77b1b314c.mp3?hdnea=exp=1788205428~acl=/api/1/1/9/f/3/0/9f3c661f9f58a75fe6e7aeb77b1b314c.mp3*~data=user_id=0,application_id=42~hmac=48bff5b303e4b9cf8fa0c0802438a4c5cfcc1de8f6c6c49db8c059114f9ea328",
+    "link": "https://www.deezer.com/track/63480987",
+    "features": {
+      "bpm": 120.2538833618164,
+      "key": "C",
+      "scale": "major",
+      "key_confidence": 0.8323862552642822,
+      "danceability": 1.4363579750061035,
+      "rms": 0.1858300268650055,
+      "tags": [
+        [
+          "soul",
+          0.4109
+        ],
+        [
+          "pop",
+          0.2373
+        ],
+        [
+          "female vocalists",
+          0.2248
+        ],
+        [
+          "rock",
+          0.1271
+        ],
+        [
+          "70s",
+          0.081
+        ],
+        [
+          "funk",
+          0.0727
+        ],
+        [
+          "jazz",
+          0.0689
+        ],
+        [
+          "rnb",
+          0.0589
+        ],
+        [
+          "classic rock",
+          0.0473
+        ],
+        [
+          "80s",
+          0.0454
+        ]
+      ],
+      "embedding": null
+    }
+  }
+]
