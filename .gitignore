@@ -1,0 +1,16 @@
+models/
+audio_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+.env
+ios/**/xcuserdata/
+
+# legacy MVP derived artifacts
+legacy/samples/
+legacy/library.json
+legacy/graph.json
+legacy/sound_connections.html

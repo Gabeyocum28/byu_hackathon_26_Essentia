@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -55,10 +56,23 @@ def related_artists(artist_id: int, limit: int = 10) -> list[dict]:
 
 
 def download_preview(track: dict, dest_dir: Path) -> Path:
-    """Download a track's 30s preview MP3 (cached by track id)."""
+    """Download a track's 30s preview MP3 (cached by track id).
+
+    Preview URLs are signed and expire after ~15 minutes; on a 403 we
+    re-fetch the track from the API for a fresh URL and retry once.
+    """
     dest_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^A-Za-z0-9 _-]", "_", f"{track['artist']} - {track['title']}")
     path = dest_dir / f"{track['id']}_{safe[:60]}.mp3"
     if not path.exists():
-        urllib.request.urlretrieve(track["preview"], path)
+        try:
+            urllib.request.urlretrieve(track["preview"], path)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 403:
+                raise
+            fresh = _get(f"/track/{track['id']}").get("preview")
+            if not fresh:
+                raise
+            track["preview"] = fresh
+            urllib.request.urlretrieve(fresh, path)
     return path
