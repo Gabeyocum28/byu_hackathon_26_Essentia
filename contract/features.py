@@ -14,7 +14,6 @@ TRACK_FIELDS = frozenset(
 AXES = [
     {"id": "sounds_like", "label": "Sounds like this"},
     {"id": "mood",        "label": "Keep the feeling"},
-    {"id": "genre",       "label": "Keep the style"},
     {"id": "groove",      "label": "Keep the groove"},
     {"id": "surprise",    "label": "Surprise me"},
 ]
