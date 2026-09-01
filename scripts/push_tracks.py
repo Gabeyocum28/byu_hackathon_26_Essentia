@@ -71,13 +71,27 @@ def corpus_ids_on_vm() -> set[str]:
     return set(out.stdout.split()) if out.returncode == 0 else set()
 
 
+def _fresh_track(track_id: str) -> dict | None:
+    from music_recommendations.server import deezer
+
+    return deezer.get_track(track_id)
+
+
 def _process_track(track: dict) -> tuple[str, str]:
-    """Worker: analyze one track and push it. Returns (track_id, error or '')."""
+    """Worker: analyze one track and push it. Returns (track_id, error or '').
+
+    Preview URLs expire (hdnea token, ~15 min), so a URL fetched at queue
+    time is stale by the time a worker gets here: re-fetch it first.
+    """
+    tid = track["track_id"]
     try:
+        fresh = _fresh_track(tid)
+        if fresh:
+            track = fresh
         push(payload(track, analyze(track)))
-        return track["track_id"], ""
+        return tid, ""
     except Exception as exc:
-        return track["track_id"], str(exc)[:200]
+        return tid, str(exc)[:200]
 
 
 def run_parallel(tracks: list[dict], workers: int) -> list[str]:
@@ -149,8 +163,6 @@ def analyze(track: dict) -> dict:
 
 
 def main() -> None:
-    from music_recommendations.server import deezer
-
     args = sys.argv[1:]
     workers = 0
     if "--workers" in args:
@@ -178,20 +190,10 @@ def main() -> None:
     if not ids:
         sys.exit(__doc__)
 
-    failures = []
-    for n, track_id in enumerate(ids, 1):
-        start = time.time()
-        try:
-            track = deezer.get_track(track_id)
-            if track is None:
-                raise RuntimeError("not on Deezer or no preview")
-            push(payload(track, analyze(track)))
-            print(f"[{n}/{len(ids)}] {track_id}: pushed "
-                  f"{track['artist']} — {track['title'][:40]} "
-                  f"({time.time()-start:.1f}s)")
-        except Exception as exc:
-            failures.append(track_id)
-            print(f"[{n}/{len(ids)}] {track_id}: FAILED — {exc}")
+    workers = workers or default_workers()
+    print(f"{len(ids)} tracks to push; {workers} workers")
+    # _process_track re-fetches each track by id, so a bare id is enough.
+    failures = run_parallel([{"track_id": i} for i in ids], workers)
 
     print(f"\ndone: {len(ids) - len(failures)} pushed, {len(failures)} failed")
     if failures:

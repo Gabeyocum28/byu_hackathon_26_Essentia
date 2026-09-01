@@ -71,3 +71,17 @@ def test_chart_tracks_skips_existing_corpus_ids(monkeypatch):
     monkeypatch.setattr(push, "_get_json", lambda url:
         {"data": [{"id": 0, "name": "All"}]} if url.endswith("/genre") else {"data": [item]})
     assert push.chart_tracks(skip_ids={"7"}) == []
+
+
+def test_process_track_refreshes_preview_url(monkeypatch):
+    """Deezer preview URLs expire (~15 min hdnea token); a queued track's URL
+    is stale by the time a worker reaches it. Refresh via get_track first."""
+    stale = dict(TRACK, preview_url="http://x/expired.mp3")
+    fresh = dict(TRACK, preview_url="http://x/fresh.mp3")
+    seen = {}
+    monkeypatch.setattr(push, "_fresh_track", lambda tid: dict(fresh))
+    monkeypatch.setattr(push, "analyze", lambda t: seen.update(t) or FEATURES)
+    monkeypatch.setattr(push, "push", lambda blob: None)
+    tid, err = push._process_track(stale)
+    assert err == ""
+    assert seen["preview_url"] == "http://x/fresh.mp3"
