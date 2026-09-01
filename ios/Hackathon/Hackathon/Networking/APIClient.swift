@@ -67,12 +67,36 @@ actor APIClient {
 
     /// GET /viz/map?track_id=...&axis=...&limit=... — demo/debug endpoint
     /// behind the Insights screen, NOT part of contract/contract.md.
-    func vizMap(trackID: String, axis: String, limit: Int = 10) async throws -> VizMap {
-        try await get("viz/map", query: [
+    func vizMap(trackID: String, axis: String, limit: Int = 10,
+                correction: Bool? = nil) async throws -> VizMap {
+        var query = [
             URLQueryItem(name: "track_id", value: trackID),
             URLQueryItem(name: "axis", value: axis),
             URLQueryItem(name: "limit", value: String(limit)),
-        ], as: VizMap.self)
+        ]
+        if let correction {
+            query.append(URLQueryItem(name: "correction",
+                                      value: correction ? "on" : "off"))
+        }
+        return try await get("viz/map", query: query, as: VizMap.self)
+    }
+
+    func vizWalk(from: String, to: String, k: Int = 8) async throws -> VizWalk {
+        try await get("viz/walk", query: [
+            URLQueryItem(name: "from", value: from),
+            URLQueryItem(name: "to", value: to),
+            URLQueryItem(name: "k", value: String(k)),
+        ], as: VizWalk.self)
+    }
+
+    func vizHistogram(trackID: String) async throws -> VizHistogram {
+        try await get("viz/histogram", query: [
+            URLQueryItem(name: "track_id", value: trackID),
+        ], as: VizHistogram.self)
+    }
+
+    func vizHubs() async throws -> VizHubs {
+        try await get("viz/hubs", as: VizHubs.self)
     }
 
     // MARK: - Transport

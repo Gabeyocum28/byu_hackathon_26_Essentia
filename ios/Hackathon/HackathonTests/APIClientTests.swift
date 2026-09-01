@@ -121,4 +121,32 @@ struct APIClientTests {
         _ = try await makeClient().seed(trackID: "1")
         #expect(MockURLProtocol.lastRequest?.timeoutInterval == 30)
     }
+
+    @Test func vizWalkSendsBothEndpointsAndK() async throws {
+        MockURLProtocol.handler = { _ in
+            let body = """
+            { "path": [
+              { "track_id": "1", "title": "A", "artist": "X", "album": "Z",
+                "artwork_url": null, "preview_url": null, "x": 0, "y": 0 },
+              { "track_id": "2", "title": "B", "artist": "Y", "album": "Z",
+                "artwork_url": null, "preview_url": null, "x": 1, "y": 1 }
+            ], "geodesic": 1.2, "ambient": 1.0, "detour": 1.2, "k": 6 }
+            """
+            return (200, Data(body.utf8))
+        }
+
+        _ = try await makeClient().vizWalk(from: "1", to: "2", k: 6)
+
+        let requestURL = try #require(MockURLProtocol.lastRequest?.url)
+        let components = try #require(
+            URLComponents(url: requestURL, resolvingAgainstBaseURL: false)
+        )
+        let query = Dictionary(uniqueKeysWithValues:
+            (components.queryItems ?? []).map { ($0.name, $0.value) }
+        )
+        #expect(components.path == "/viz/walk")
+        #expect(query["from"] == "1")
+        #expect(query["to"] == "2")
+        #expect(query["k"] == "6")
+    }
 }
