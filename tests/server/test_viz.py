@@ -517,3 +517,142 @@ def test_viz_extremes_404_when_corpus_empty(client, fake_redis):
     resp = client.get("/viz/extremes")
     assert resp.status_code == 404
     assert resp.json()["detail"] == "needs at least two tracks"
+
+
+# ---- T2.6 attribution: band math, band-stop DSP, and the mailbox route ----
+
+
+def test_band_edges_are_log_spaced_across_the_model_bandwidth():
+    bands = viz.band_edges()
+
+    assert len(bands) == viz.ATTRIBUTION_BANDS
+    assert bands[0][0] == pytest.approx(viz.ATTRIBUTION_LO_HZ)
+    assert bands[-1][1] == pytest.approx(viz.ATTRIBUTION_HI_HZ)
+    # EffNet hears 16 kHz audio, so no band may claim energy above Nyquist.
+    assert bands[-1][1] < 8000
+    # Contiguous, and equal ratios (equal octave widths) rather than linear.
+    for (lo, hi), (next_lo, _) in zip(bands, bands[1:]):
+        assert hi == pytest.approx(next_lo)
+    ratios = [hi / lo for lo, hi in bands]
+    assert max(ratios) == pytest.approx(min(ratios))
+
+
+def _tone(freq, sample_rate=16000, seconds=1.0, amplitude=1.0):
+    t = np.arange(int(sample_rate * seconds)) / sample_rate
+    return amplitude * np.sin(2 * np.pi * freq * t)
+
+
+def _energy_at(signal, freq, sample_rate=16000):
+    spectrum = np.abs(np.fft.rfft(signal))
+    bin_index = int(round(freq * len(signal) / sample_rate))
+    return float(spectrum[bin_index - 1:bin_index + 2].max())
+
+
+def test_band_stop_reconstructs_audio_outside_the_stopped_band():
+    # Nothing of the signal lives in the removed band, so overlap-add with
+    # the original phase must give the input back (the COLA property).
+    audio = _tone(220.0)
+    out = viz.band_stop(audio, 16000, 4000.0, 5000.0)
+
+    assert out.shape == audio.shape
+    # Interior samples come back to machine precision. The first and last
+    # frame legitimately differ: the preview starts abruptly, and that step
+    # has energy inside the stopped band, so removing the band must change
+    # it. Only the edges — the padding guarantees full window coverage.
+    interior = slice(2048, len(audio) - 2048)
+    assert np.abs(out[interior] - audio[interior]).max() < 1e-6
+
+
+def test_band_stop_with_nothing_to_remove_is_exact_overlap_add():
+    # A stop band above Nyquist masks no bins at all, so this isolates the
+    # COLA property itself: Hann at 50% hop reconstructs every sample,
+    # edges included, with no windowing residue.
+    audio = _tone(220.0) + _tone(3000.0, amplitude=0.4)
+    out = viz.band_stop(audio, 16000, 9000.0, 9500.0)
+
+    assert np.abs(out - audio).max() < 1e-9
+
+
+def test_band_stop_removes_only_the_selected_band():
+    audio = _tone(200.0) + _tone(4000.0)
+    out = viz.band_stop(audio, 16000, 3000.0, 5000.0)
+
+    kept_before, kept_after = _energy_at(audio, 200.0), _energy_at(out, 200.0)
+    gone_before, gone_after = _energy_at(audio, 4000.0), _energy_at(out, 4000.0)
+
+    assert gone_after < gone_before / 100          # >40 dB down in the band
+    assert kept_after == pytest.approx(kept_before, rel=0.02)
+
+
+def test_viz_attribute_queues_the_pair_once_and_reports_pending(client, seeded_corpus, fake_redis):
+    seed, rec = seeded_corpus[0]["track_id"], seeded_corpus[1]["track_id"]
+
+    first = client.get("/viz/attribute", params={"seed": seed, "rec": rec})
+    assert first.status_code == 200
+    assert first.json() == {"status": "pending"}
+    assert fake_redis.lists["attr:queue"] == [f"{seed}|{rec}"]
+
+    # Polling must not pile the same job up behind itself.
+    assert client.get("/viz/attribute", params={"seed": seed, "rec": rec}).json() == {
+        "status": "pending"
+    }
+    assert fake_redis.lists["attr:queue"] == [f"{seed}|{rec}"]
+
+
+def test_viz_attribute_serves_the_cached_result_when_the_worker_is_done(client, seeded_corpus):
+    seed, rec = seeded_corpus[0]["track_id"], seeded_corpus[1]["track_id"]
+    ready = {
+        "status": "ready",
+        "base": 0.83,
+        "bands": [{"lo_hz": 60.0, "hi_hz": 120.0, "delta": 0.4}],
+    }
+    store.put_attribution(seed, rec, ready)
+
+    assert client.get("/viz/attribute", params={"seed": seed, "rec": rec}).json() == ready
+
+
+def test_viz_attribute_passes_a_worker_failure_through(client, seeded_corpus):
+    seed, rec = seeded_corpus[0]["track_id"], seeded_corpus[1]["track_id"]
+    store.put_attribution(seed, rec, {"status": "failed", "error": "no preview"}, ttl=60)
+
+    body = client.get("/viz/attribute", params={"seed": seed, "rec": rec}).json()
+    assert body["status"] == "failed"
+
+
+def test_viz_attribute_400_when_seed_is_the_rec(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    resp = client.get("/viz/attribute", params={"seed": tid, "rec": tid})
+    assert resp.status_code == 400
+
+
+def test_viz_attribute_404_when_a_track_is_unanalyzed(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    assert client.get("/viz/attribute", params={"seed": tid, "rec": "nope"}).status_code == 404
+    assert client.get("/viz/attribute", params={"seed": "nope", "rec": tid}).status_code == 404
+
+
+def test_adjacent_low_bands_stay_separable():
+    """The lowest log-spaced bands are only a few bins wide. With a fixed
+    taper they blur into one filter and their attributions become
+    indistinguishable — the tone in band 1 must survive band 2's removal."""
+    bands = viz.band_edges()
+    audio = _tone(80.0)          # inside band 1 (60-98 Hz), not band 2
+
+    stopped = viz.band_stop(audio, 16000, *bands[0], fft_size=8192, hop=4096)
+    untouched = viz.band_stop(audio, 16000, *bands[1], fft_size=8192, hop=4096)
+
+    before = _energy_at(audio, 80.0)
+    assert _energy_at(stopped, 80.0) < before / 50
+    assert _energy_at(untouched, 80.0) > before / 2
+
+
+def test_stop_gain_taper_never_outgrows_the_band_it_softens():
+    freqs = np.fft.rfftfreq(8192, 1.0 / 16000)
+    lo, hi = viz.band_edges()[0]
+
+    gain = viz._stop_gain(freqs, lo, hi, taper_bins=4)
+
+    stopped = np.count_nonzero(gain == 0.0)
+    tapered = np.count_nonzero((gain > 0.0) & (gain < 1.0))
+    assert stopped > 0
+    assert tapered <= stopped

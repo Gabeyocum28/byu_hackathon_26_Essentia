@@ -15,10 +15,11 @@ import os
 import tempfile
 import time
 import urllib.request
+import wave
 from pathlib import Path
 
 from music_recommendations.analysis import analyze_track
-from music_recommendations.server import deezer, store
+from music_recommendations.server import deezer, store, viz
 
 
 def download_preview(url: str) -> Path:
@@ -75,24 +76,155 @@ def process_job(track_id: str) -> bool:
             pass
 
 
+def _write_wav(samples: "np.ndarray", sample_rate: int) -> Path:
+    """16-bit PCM temp file at the audio's OWN level: MonoLoader wants a
+    path, not an array.
+
+    Deliberately no normalization. Any gain here — even one shared by every
+    band — moves the counterfactuals away from the level the clean track was
+    analyzed at, and a log-mel front end reads a level shift as a change in
+    the spectrum, folding a constant bias into all ten deltas.
+    """
+    import numpy as np
+
+    fd, name = tempfile.mkstemp(suffix=".wav")
+    os.close(fd)
+    path = Path(name)
+    pcm = np.clip(samples, -1.0, 1.0)
+    with wave.open(str(path), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(sample_rate)
+        out.writeframes((pcm * 32767).astype("<i2").tobytes())
+    return path
+
+
+def _embed_waveform(embed_mod, samples: "np.ndarray") -> "np.ndarray":
+    """Mean EffNet embedding of a raw waveform, via a temp wav (the model's
+    loader takes a path). Always cleans the file up."""
+    wav = _write_wav(samples, embed_mod.SAMPLE_RATE)
+    try:
+        return embed_mod.effnet_frames(wav).mean(axis=0)
+    finally:
+        wav.unlink(missing_ok=True)
+
+
+def _cosine(a: "np.ndarray", b: "np.ndarray") -> float:
+    import numpy as np
+
+    denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+    return float(np.dot(a, b) / denom) if denom else 0.0
+
+
+def process_attribution(seed_id: str, rec_id: str) -> bool:
+    """Occlusion attribution for one (seed, rec) pair.
+
+    For each band: delete it from the SEED's waveform, push the
+    counterfactual through the real frozen model, and measure how far the
+    pair's cosine falls. The drops are not additive (bands interact inside
+    the network) -- this is the tractable first-order surrogate for Shapley
+    values, and what the audience hears removed is exactly what the model
+    lost.
+    """
+    import numpy as np
+
+    from music_recommendations.analysis import embedding as embed_mod
+
+    mp3 = None
+    try:
+        seed_features = store.get_features(seed_id)
+        rec_features = store.get_features(rec_id)
+        if not seed_features or not rec_features:
+            raise ValueError("both tracks must be analyzed")
+        seed_vec = np.asarray(seed_features["embedding"], dtype=float)
+        rec_vec = np.asarray(rec_features["embedding"], dtype=float)
+        # The baseline compares the STORED embeddings: re-embedding the clean
+        # seed here would measure decode jitter as if it were attribution.
+        base = _cosine(seed_vec, rec_vec)
+
+        track = _fresh_track(seed_id)
+        if track is None:
+            raise ValueError("no seed metadata in Redis or on Deezer")
+        mp3 = download_preview(track["preview_url"])
+        audio = embed_mod.load_audio(mp3)          # mono, 16 kHz — model rate
+
+        # Deltas are measured against the clean audio pushed through this
+        # SAME wav path, not against the stored embedding: the stored one
+        # came from the mp3, and mp3-vs-wav decode differences would land in
+        # every delta as a constant. `base` still reports the stored cosine,
+        # so the number on screen matches the score the rest of the app shows.
+        reference = _embed_waveform(embed_mod, audio)
+        reference_similarity = _cosine(reference, rec_vec)
+
+        bands = []
+        for lo_hz, hi_hz in viz.band_edges():
+            started = time.monotonic()
+            # A long window on purpose: at 2048 the bins are 7.8 Hz and the
+            # lowest log-spaced bands are only a few bins wide, so adjacent
+            # bands would become the same filter.
+            filtered = viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz,
+                                     fft_size=8192, hop=4096)
+            occluded = _embed_waveform(embed_mod, filtered)
+            delta = reference_similarity - _cosine(occluded, rec_vec)
+            bands.append({"lo_hz": round(lo_hz, 1), "hi_hz": round(hi_hz, 1),
+                          "delta": float(delta)})
+            print(f"[embed_worker] attr {seed_id}->{rec_id} "
+                  f"{lo_hz:.0f}-{hi_hz:.0f}Hz delta={delta:+.4f} "
+                  f"({time.monotonic() - started:.1f}s)", flush=True)
+
+        store.put_attribution(seed_id, rec_id, {
+            "status": "ready", "base": base, "bands": bands,
+        })
+        print(f"[embed_worker] attr {seed_id}->{rec_id}: ready "
+              f"(base {base:.3f})", flush=True)
+        return True
+    except Exception as exc:
+        print(f"[embed_worker] attr {seed_id}->{rec_id}: FAILED  {exc}", flush=True)
+        try:
+            # Cache the failure briefly so the phone stops polling, but let
+            # the pair be retried once the TTL lapses.
+            store.put_attribution(seed_id, rec_id,
+                                  {"status": "failed", "error": str(exc)}, ttl=60)
+        except Exception:
+            pass
+        return False
+    finally:
+        if mp3 is not None:
+            mp3.unlink(missing_ok=True)
+        try:
+            store.clear_attribution_marker(seed_id, rec_id)
+        except Exception:
+            pass
+
+
 def _tick() -> None:
     """One loop iteration: dequeue and process a job, if there is one.
 
-    process_job never raises, but store.dequeue_embed can (a transient Redis
-    ConnectionError on the blocking pop) -- guard it here so main()'s loop
-    survives a Redis blip instead of dying.
+    The process_* helpers never raise, but store.dequeue_job can (a transient
+    Redis ConnectionError on the blocking pop) -- guard it here so main()'s
+    loop survives a Redis blip instead of dying.
     """
     try:
-        track_id = store.dequeue_embed(timeout=5)
-        if track_id:
-            process_job(track_id)
+        job = store.dequeue_job(timeout=5)
+        if not job:
+            return
+        kind, payload = job
+        if kind == "embed":
+            process_job(payload)
+        else:
+            seed_id, _, rec_id = payload.partition("|")
+            if seed_id and rec_id:
+                process_attribution(seed_id, rec_id)
+            else:
+                print(f"[embed_worker] bad attribution job {payload!r}", flush=True)
     except Exception as exc:
         print(f"[embed_worker] queue error {exc}, retrying in 5s", flush=True)
         time.sleep(5)
 
 
 def main() -> None:
-    print("[embed_worker] watching embed:queue (Ctrl-C to stop)", flush=True)
+    print("[embed_worker] watching embed:queue + attr:queue (Ctrl-C to stop)",
+          flush=True)
     while True:
         _tick()
 

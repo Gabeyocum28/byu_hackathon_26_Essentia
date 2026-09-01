@@ -113,3 +113,57 @@ def clear_embed_marker(track_id: str) -> None:
     r = client()
     r.srem("embed:queued", track_id)
     r.delete(f"embed:queued:{track_id}")
+
+
+# ---- attribution work queue + cache (T2.6; internal, like embed above) ----
+#   attr:queue           -> list of "seed|rec" jobs awaiting the worker
+#   attr:queued:{pair}   -> TTL guard against re-enqueueing a pending pair
+#   viz:attr:{seed}:{rec}-> the finished (or failed) result, JSON
+
+_ATTR_QUEUED_TTL_S = 300
+
+
+def _attr_pair(seed_id: str, rec_id: str) -> str:
+    return f"{seed_id}|{rec_id}"
+
+
+def get_attribution(seed_id: str, rec_id: str) -> dict | None:
+    raw = client().get(f"viz:attr:{seed_id}:{rec_id}")
+    return json.loads(raw) if raw else None
+
+
+def put_attribution(seed_id: str, rec_id: str, payload: dict,
+                    ttl: int | None = None) -> None:
+    """Cache one pair's attribution. A ready result is kept forever (the
+    corpus embedding it describes doesn't change); a failure gets a TTL so
+    the pair is retried instead of being wrong until someone clears Redis."""
+    client().set(f"viz:attr:{seed_id}:{rec_id}", json.dumps(payload), ex=ttl)
+
+
+def enqueue_attribution(seed_id: str, rec_id: str) -> bool:
+    """Queue a pair for the worker. False if this pair is already pending."""
+    r = client()
+    pair = _attr_pair(seed_id, rec_id)
+    if r.exists(f"attr:queued:{pair}"):
+        return False
+    r.set(f"attr:queued:{pair}", "1", ex=_ATTR_QUEUED_TTL_S)
+    r.lpush("attr:queue", pair)
+    return True
+
+
+def dequeue_job(timeout: int = 5) -> tuple[str, str] | None:
+    """Next job from either queue as (kind, payload).
+
+    One blocking pop over both lists: BRPOP takes the first non-empty key in
+    order, so an embed job (a human waiting on a seed) always wins over an
+    attribution job (a background explanation).
+    """
+    popped = client().brpop(["embed:queue", "attr:queue"], timeout=timeout)
+    if not popped:
+        return None
+    key, value = popped
+    return ("embed" if key.endswith("embed:queue") else "attribution"), value
+
+
+def clear_attribution_marker(seed_id: str, rec_id: str) -> None:
+    client().delete(f"attr:queued:{_attr_pair(seed_id, rec_id)}")
