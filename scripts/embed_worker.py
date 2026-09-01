@@ -36,11 +36,22 @@ def _to_plain(features: dict) -> dict:
     }
 
 
+def _fresh_track(track_id: str) -> dict | None:
+    """Prefer a fresh Deezer fetch over the stored record: preview URLs
+    expire in ~15 min (hdnea token), so a job that waited in the queue
+    would 403 on download if we trusted the URL /seed stored."""
+    try:
+        track = deezer.get_track(track_id)
+    except Exception:
+        track = None
+    return track or store.get_track(track_id)
+
+
 def process_job(track_id: str) -> bool:
     """Analyze one queued track. True on success; logs and swallows failures
     so one bad track never kills the loop."""
     try:
-        track = store.get_track(track_id) or deezer.get_track(track_id)
+        track = _fresh_track(track_id)
         if track is None:
             print(f"[embed_worker] {track_id}: no metadata in Redis or on Deezer", flush=True)
             return False

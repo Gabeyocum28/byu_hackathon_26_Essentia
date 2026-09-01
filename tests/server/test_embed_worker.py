@@ -30,8 +30,8 @@ def analysis_ok(monkeypatch, tmp_path):
     monkeypatch.setattr(worker, "analyze_track", lambda p: dict(FEATURES))
 
 
-def test_process_job_analyzes_stores_and_clears_marker(fake_redis, analysis_ok):
-    store.put_track_meta(TRACK)
+def test_process_job_analyzes_stores_and_clears_marker(fake_redis, analysis_ok, monkeypatch):
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
     store.enqueue_embed("42")
 
     assert worker.process_job("42") is True
@@ -40,10 +40,37 @@ def test_process_job_analyzes_stores_and_clears_marker(fake_redis, analysis_ok):
     assert store.enqueue_embed("42") is True   # marker cleared -> re-enqueueable
 
 
-def test_process_job_falls_back_to_deezer_for_metadata(fake_redis, analysis_ok, monkeypatch):
-    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+def test_process_job_prefers_fresh_deezer_preview_url(fake_redis, monkeypatch, tmp_path):
+    """Stored preview URLs expire (~15 min hdnea token): a queued job must
+    re-fetch from Deezer rather than download the URL /seed stored."""
+    store.put_track_meta({**TRACK, "preview_url": "http://x/stale.mp3"})
+    fresh = {**TRACK, "preview_url": "http://x/fresh.mp3"}
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(fresh))
+    monkeypatch.setattr(worker, "analyze_track", lambda p: dict(FEATURES))
+
+    mp3 = tmp_path / "p.mp3"
+    mp3.write_bytes(b"mp3")
+    downloaded = []
+
+    def recording_download(url):
+        downloaded.append(url)
+        return mp3
+
+    monkeypatch.setattr(worker, "download_preview", recording_download)
+
     assert worker.process_job("42") is True
-    assert store.get_track("42") == TRACK
+    assert downloaded == ["http://x/fresh.mp3"]
+    assert store.get_track("42")["preview_url"] == "http://x/fresh.mp3"
+
+
+def test_process_job_falls_back_to_stored_track_when_deezer_down(fake_redis, analysis_ok, monkeypatch):
+    def deezer_down(t):
+        raise OSError("no network")
+
+    store.put_track_meta(TRACK)
+    monkeypatch.setattr(worker.deezer, "get_track", deezer_down)
+    assert worker.process_job("42") is True
+    assert store.get_features("42") == FEATURES
 
 
 def test_process_job_failure_logs_clears_marker_never_raises(fake_redis, monkeypatch):
@@ -52,6 +79,7 @@ def test_process_job_failure_logs_clears_marker_never_raises(fake_redis, monkeyp
 
     store.put_track_meta(TRACK)
     store.enqueue_embed("42")
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
     monkeypatch.setattr(worker, "download_preview", boom)
 
     assert worker.process_job("42") is False
