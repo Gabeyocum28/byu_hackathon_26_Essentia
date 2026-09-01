@@ -14,7 +14,12 @@ def _features():
 
 def test_axes_ids_match_spec():
     f = _features()
-    assert [a["id"] for a in f.AXES] == ["sounds_like", "groove", "surprise"]
+    # Diverged from the spec's original three: best_match blends the embedding
+    # and genre percentiles, and the groove axis was dropped — four rhythm
+    # numbers could not carry a recommendation on their own.
+    assert [a["id"] for a in f.AXES] == [
+        "sounds_like", "best_match", "surprise",
+    ]
 
 
 def test_track_fields():

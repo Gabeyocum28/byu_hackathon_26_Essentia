@@ -14,13 +14,20 @@ being analyzed. Measured on a 10-core run, downloading a batch and analyzing
 it strictly in turn left the CPU idle for most of the wall clock, because a
 preview fetch is network latency and nothing else.
 
-Each mp3 is deleted the moment its features reach Redis. The features ARE the
-product; the audio is scratch, and at ~225 KB a preview a corpus of tens of
-thousands would fill the disk for nothing. The cost is that bumping
-FEATURES_VERSION re-downloads rather than re-reading from disk.
+Each mp3 leaves the working cache the moment its features reach Redis. The
+features ARE the product; the audio is scratch, and at ~225 KB a preview a
+corpus of tens of thousands would fill the disk for nothing.
+
+Set ARCHIVE_DIR to keep them anyway -- point it at an external disk and the
+preview is MOVED there instead of deleted, which turns a FEATURES_VERSION bump
+from a re-download of the whole corpus at Deezer's rate limit into a local,
+CPU-only re-analysis. Downloads still land on the internal disk first, so an
+archive that is full, slow, or unplugged costs the archive, never the run.
 """
 from __future__ import annotations
 
+import os
+import shutil
 from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
@@ -28,6 +35,8 @@ from music_recommendations.analysis import FEATURES_VERSION
 from music_recommendations.analysis.batch import analyze_many
 from music_recommendations.corpus.download import AUDIO_CACHE, download_preview
 from music_recommendations.server import store
+
+ARCHIVE_DIR = os.environ.get("ARCHIVE_DIR")
 
 BATCH = 100
 # Previews are ~225 KB each and most need a fresh signed URL first, so this is
@@ -77,9 +86,23 @@ def _collect(futures: list[Future]) -> list[tuple[dict, Path]]:
 
 
 def _discard(path) -> None:
-    """Drop an analyzed preview. Missing is fine -- the point is that it is gone."""
+    """Retire an analyzed preview: archived if ARCHIVE_DIR is set, else deleted.
+
+    Never raises. A missing file is fine -- the point is that it is no longer
+    taking up room in the working cache -- and an archive that cannot be
+    written falls back to deleting rather than stalling the run.
+    """
+    path = Path(path)
+    if ARCHIVE_DIR:
+        try:
+            target = Path(ARCHIVE_DIR)
+            target.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(path), str(target / path.name))
+            return
+        except (OSError, shutil.Error):
+            pass  # unplugged, full, or read-only: fall through and delete
     try:
-        Path(path).unlink()
+        path.unlink()
     except OSError:
         pass
 

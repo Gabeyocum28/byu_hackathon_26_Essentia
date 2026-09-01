@@ -42,9 +42,13 @@ FEATURES_VERSION = 2
 #                points into the same orthant, so cosine scores everything
 #                0.98-1.00 and the ordering is noise. Measured on a 150-track
 #                pool: cosine gave a 0.98-1.00 spread, euclidean 0.60-0.96.
+#   genre     -- 400 Discogs style probabilities. Sparse and non-negative, but
+#                unlike groove it is high-dimensional, so tracks do NOT all
+#                collapse into one orthant: direction is what carries "which
+#                styles, in what proportion". Cosine.
 METRICS = {
     "embedding": "cosine",
-    "groove": "euclidean",
+    "genre": "cosine",
 }
 
 # A note for whoever implements ranking, not a value to import:
