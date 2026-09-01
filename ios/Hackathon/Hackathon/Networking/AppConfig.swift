@@ -10,11 +10,14 @@
 import Foundation
 
 enum AppConfig {
-    /// Default to the deployed FastAPI server. Override with `ESSENTIA_BASE_URL`
-    /// when you want to point the simulator at a different host.
+    /// Live Essencia server: Andrew's Mac via Cloudflare tunnel, holding the
+    /// 83k-track corpus. Quick-tunnel hostnames change on every restart, so
+    /// expect this default to churn — override it without editing code by
+    /// setting ESSENTIA_BASE_URL (e.g. to the deployed host at
+    /// http://163.192.48.114:8000).
     nonisolated static let baseURL: URL = {
         let env = ProcessInfo.processInfo.environment["ESSENTIA_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw = (env?.isEmpty == false ? env : nil) ?? "http://163.192.48.114:8000"
+        let raw = (env?.isEmpty == false ? env : nil) ?? "https://tray-planes-defeat-projectors.trycloudflare.com"
         return URL(string: raw)!
     }()
 
