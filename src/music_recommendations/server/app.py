@@ -16,7 +16,7 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
 from typing import NamedTuple
 
@@ -203,7 +203,8 @@ def _build(corpus: tuple[str, ...], feature_key: str, metric: str,
 
 
 @app.get("/recommend")
-def recommend(track_id: str, axis: str, limit: int = 10) -> dict:
+def recommend(track_id: str, axis: str,
+              limit: int = Query(10, ge=1, le=50)) -> dict:
     if axis not in AXIS_FEATURES:
         raise HTTPException(400, f"unknown axis {axis!r}")
 

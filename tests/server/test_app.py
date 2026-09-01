@@ -276,3 +276,18 @@ def test_seed_falls_back_when_essentia_unavailable(client, fake_redis, monkeypat
     body = client.post("/seed", json={"track_id": tid})
     assert body.status_code == 200
     assert body.json()["status"] == "ready"
+
+
+def test_recommend_limit_is_capped(client, seeded_corpus):
+    """limit=500 dumped the whole corpus via the public route; cap it."""
+    tid = seeded_corpus[0]["track_id"]
+    r = client.get("/recommend", params={"track_id": tid, "axis": "sounds_like",
+                                         "limit": 500})
+    assert r.status_code == 422
+
+
+def test_recommend_limit_50_is_allowed(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    r = client.get("/recommend", params={"track_id": tid, "axis": "sounds_like",
+                                         "limit": 50})
+    assert r.status_code == 200
