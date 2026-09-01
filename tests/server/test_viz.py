@@ -4,6 +4,7 @@ Non-contract debug/demo endpoint. The galaxy map is always a projection of
 EMBEDDING space (that's "where the music lies"); the axis only changes which
 scores and math are attached to the recommendations.
 """
+import base64
 import json
 from pathlib import Path
 
@@ -42,6 +43,107 @@ def test_project_2d_handles_single_row():
     xy = viz.project_2d(np.ones((1, 4)))
     assert xy.shape == (1, 2)
     assert np.all(np.isfinite(xy))
+
+
+# ---- project_top8 (pure math) ----
+
+def test_project_top8_shape_and_determinism():
+    rng = np.random.default_rng(0)
+    matrix = rng.normal(size=(30, 10))
+    coords8, variance = viz.project_top8(matrix)
+    assert coords8.shape == (30, 8)
+    assert variance.shape == (8,)
+    coords8_again, variance_again = viz.project_top8(matrix)
+    assert np.allclose(coords8, coords8_again)
+    assert np.allclose(variance, variance_again)
+
+
+def test_project_top8_matches_project_2d_first_two_columns():
+    rng = np.random.default_rng(2)
+    matrix = rng.normal(size=(25, 6))
+    xy = viz.project_2d(matrix)
+    coords8, _ = viz.project_top8(matrix)
+    assert np.allclose(xy, coords8[:, :2])
+
+
+def test_project_top8_variance_non_increasing_and_bounded():
+    rng = np.random.default_rng(3)
+    matrix = rng.normal(size=(40, 12))
+    _, variance = viz.project_top8(matrix)
+    assert np.all(variance >= 0.0) and np.all(variance <= 1.0)
+    assert all(variance[i] >= variance[i + 1] for i in range(7))
+
+
+def test_project_top8_pads_low_dimensional_corpora():
+    rng = np.random.default_rng(4)
+    matrix = rng.normal(size=(6, 3))
+    coords8, variance = viz.project_top8(matrix)
+    assert coords8.shape == (6, 8)
+    assert np.allclose(coords8[:, 3:], 0.0)
+    assert np.allclose(variance[3:], 0.0)
+
+
+def test_project_top8_handles_single_row():
+    coords8, variance = viz.project_top8(np.ones((1, 4)))
+    assert coords8.shape == (1, 8)
+    assert variance.shape == (8,)
+    assert np.all(np.isfinite(coords8))
+
+
+# ---- minimum_spanning_tree (pure math) ----
+
+def test_minimum_spanning_tree_known_by_inspection():
+    # Four points on a line: 0, 1, 3, 6. Cosine distance won't reproduce a
+    # literal line, so build a matrix whose cosine geometry has an obvious
+    # MST instead: unit vectors at increasing angles on a quarter circle,
+    # so the cheapest tree is the path 0-1-2-3 (each hop the same, adjacent
+    # angle).
+    theta = np.array([0.0, 0.2, 0.4, 0.6])
+    matrix = np.column_stack([np.cos(theta), np.sin(theta)])
+    edges = viz.minimum_spanning_tree(matrix)
+
+    assert len(edges) == 3
+    assert {(i, j) for i, j, _ in edges} == {(0, 1), (1, 2), (2, 3)}
+    ds = [d for _, _, d in edges]
+    assert ds == sorted(ds)
+
+
+def test_minimum_spanning_tree_forms_spanning_tree():
+    rng = np.random.default_rng(5)
+    matrix = rng.normal(size=(20, 5))
+    ids, matrix = list(range(20)), matrix
+    edges = viz.minimum_spanning_tree(matrix)
+    assert len(edges) == len(ids) - 1
+
+    parent = list(range(len(ids)))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    components = len(ids)
+    for i, j, _ in edges:
+        assert i < j
+        ri, rj = find(i), find(j)
+        assert ri != rj  # no cycle
+        parent[ri] = rj
+        components -= 1
+    assert components == 1
+
+
+def test_minimum_spanning_tree_sorted_ascending_and_deterministic():
+    rng = np.random.default_rng(6)
+    matrix = rng.normal(size=(15, 4))
+    edges = viz.minimum_spanning_tree(matrix)
+    ds = [d for _, _, d in edges]
+    assert ds == sorted(ds)
+    assert edges == viz.minimum_spanning_tree(matrix)
+
+
+def test_minimum_spanning_tree_empty_for_single_row():
+    assert viz.minimum_spanning_tree(np.ones((1, 4))) == []
 
 
 # ---- GET /viz/map ----
@@ -271,3 +373,147 @@ def test_viz_hubs_reports_k_occurrence_central_and_isolated(client, seeded_corpu
     assert body["hubs"][0]["count"] >= body["hubs"][-1]["count"]
     assert body["central"][0]["centrality"] >= body["central"][-1]["centrality"]
     assert body["isolated"][0]["centrality"] <= body["isolated"][-1]["centrality"]
+
+
+# ---- T2: tour, mst, extremes ----
+
+def test_viz_tour_ids_and_coords_shape(client, seeded_corpus):
+    body = client.get("/viz/tour").json()
+    n = len(seeded_corpus)
+    assert sorted(body["ids"]) == sorted(t["track_id"] for t in seeded_corpus)
+
+    raw = base64.b64decode(body["coords8"])
+    coords = np.frombuffer(raw, dtype="<f4").reshape(n, 8)
+    assert coords.shape == (n, 8)
+    assert np.all(np.isfinite(coords))
+
+    assert len(body["variance"]) == 8
+    for v in body["variance"]:
+        assert 0.0 <= v <= 1.0
+    assert all(
+        body["variance"][i] >= body["variance"][i + 1] for i in range(7)
+    )
+
+
+def test_viz_tour_first_two_coords_match_viz_map_xy(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    map_body = client.get(
+        "/viz/map", params={"track_id": tid, "axis": "sounds_like"}
+    ).json()
+    tour_body = client.get("/viz/tour").json()
+
+    map_ids = map_body["points"]["ids"]
+    tour_ids = tour_body["ids"]
+    n = len(tour_ids)
+    coords = np.frombuffer(
+        base64.b64decode(tour_body["coords8"]), dtype="<f4"
+    ).reshape(n, 8)
+
+    tour_pos = {t: i for i, t in enumerate(tour_ids)}
+    for i, mid in enumerate(map_ids):
+        row = coords[tour_pos[mid]]
+        assert row[0] == pytest.approx(map_body["points"]["x"][i], abs=1e-3)
+        assert row[1] == pytest.approx(map_body["points"]["y"][i], abs=1e-3)
+
+
+def test_viz_tour_is_deterministic_across_calls(client, seeded_corpus):
+    first = client.get("/viz/tour").json()
+    second = client.get("/viz/tour").json()
+    assert first == second
+
+
+def test_viz_tour_404_when_corpus_empty(client, fake_redis):
+    resp = client.get("/viz/tour")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "needs at least two tracks"
+
+
+def test_viz_mst_has_n_minus_one_edges_sorted_and_spanning(client, seeded_corpus):
+    body = client.get("/viz/mst").json()
+    ids = body["ids"]
+    n = len(ids)
+    edges = body["edges"]
+    assert len(edges) == n - 1
+
+    ds = [e[2] for e in edges]
+    assert ds == sorted(ds)
+
+    parent = list(range(n))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    components = n
+    for i, j, d in edges:
+        assert 0 <= i < n and 0 <= j < n and i < j
+        ri, rj = find(i), find(j)
+        assert ri != rj  # no cycle
+        parent[ri] = rj
+        components -= 1
+    assert components == 1
+
+
+def test_viz_mst_is_deterministic_across_calls(client, seeded_corpus):
+    first = client.get("/viz/mst").json()
+    second = client.get("/viz/mst").json()
+    assert first == second
+
+
+def test_viz_mst_404_when_corpus_empty(client, fake_redis):
+    resp = client.get("/viz/mst")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "needs at least two tracks"
+
+
+def test_viz_extremes_low_high_disjoint_and_ordered(client, seeded_corpus):
+    body = client.get("/viz/extremes", params={"pc": 1, "limit": 3}).json()
+    assert body["pc"] == 1
+    assert 0.0 < body["variance_pct"] <= 100.0
+
+    low_ids = [t["track_id"] for t in body["low"]]
+    high_ids = [t["track_id"] for t in body["high"]]
+    assert set(low_ids).isdisjoint(high_ids)
+
+    tour = client.get("/viz/tour").json()
+    n = len(tour["ids"])
+    coords = np.frombuffer(
+        base64.b64decode(tour["coords8"]), dtype="<f4"
+    ).reshape(n, 8)
+    pos = {t: i for i, t in enumerate(tour["ids"])}
+    low_values = [coords[pos[i], 0] for i in low_ids]
+    high_values = [coords[pos[i], 0] for i in high_ids]
+    assert low_values == sorted(low_values)
+    assert high_values == sorted(high_values, reverse=True)
+
+
+def test_viz_extremes_pc2_differs_from_pc1(client, seeded_corpus):
+    pc1 = client.get("/viz/extremes", params={"pc": 1}).json()
+    pc2 = client.get("/viz/extremes", params={"pc": 2}).json()
+    assert pc1["low"] != pc2["low"] or pc1["high"] != pc2["high"]
+
+
+def test_viz_extremes_track_shape_matches_contract(client, seeded_corpus):
+    body = client.get("/viz/extremes", params={"pc": 1, "limit": 2}).json()
+    for track in body["low"] + body["high"]:
+        assert set(track) >= {
+            "track_id", "title", "artist", "album", "artwork_url", "preview_url",
+        }
+
+
+def test_viz_extremes_422_on_pc_out_of_range(client, seeded_corpus):
+    assert client.get("/viz/extremes", params={"pc": 0}).status_code == 422
+    assert client.get("/viz/extremes", params={"pc": 9}).status_code == 422
+
+
+def test_viz_extremes_422_on_limit_out_of_range(client, seeded_corpus):
+    assert client.get("/viz/extremes", params={"limit": 0}).status_code == 422
+    assert client.get("/viz/extremes", params={"limit": 11}).status_code == 422
+
+
+def test_viz_extremes_404_when_corpus_empty(client, fake_redis):
+    resp = client.get("/viz/extremes")
+    assert resp.status_code == 404
+    assert resp.json()["detail"] == "needs at least two tracks"

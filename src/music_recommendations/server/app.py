@@ -430,6 +430,20 @@ def _viz_embedding_corpus() -> tuple[list[str], np.ndarray]:
     return ids, matrix
 
 
+def _viz_embedding_corpus_min2() -> tuple[list[str], np.ndarray]:
+    """Like _viz_embedding_corpus, but the T2 endpoints (/viz/tour,
+    /viz/mst, /viz/extremes) are pinned to a single 404 message regardless
+    of whether the corpus is empty or has exactly one track -- SVD/MST need
+    at least two rows either way."""
+    try:
+        ids, matrix = _viz_embedding_corpus()
+    except HTTPException:
+        ids, matrix = [], np.empty((0, 1))
+    if len(ids) < 2:
+        raise HTTPException(404, "needs at least two tracks")
+    return ids, matrix
+
+
 def _viz_track(track_id: str) -> dict:
     return _safe(store.get_track, track_id) or {
         "track_id": track_id,
@@ -558,9 +572,7 @@ def viz_tour() -> dict:
     0-1 of coords8 are numerically identical to /viz/map's x/y — same SVD,
     same sign convention, same matrix-pinned cache (_TOP8_CACHE).
     """
-    ids, matrix = _viz_embedding_corpus()
-    if len(ids) < 2:
-        raise HTTPException(404, "needs at least two tracks")
+    ids, matrix = _viz_embedding_corpus_min2()
     coords8, variance = _top8(matrix)
     coords8_b64 = base64.b64encode(
         np.asarray(coords8, dtype="<f4").tobytes()
@@ -579,9 +591,7 @@ def viz_mst() -> dict:
     Non-contract debug/demo endpoint. The H0 barcode's death times are
     exactly these edge weights.
     """
-    ids, matrix = _viz_embedding_corpus()
-    if len(ids) < 2:
-        raise HTTPException(404, "needs at least two tracks")
+    ids, matrix = _viz_embedding_corpus_min2()
     edges = _mst(matrix)
     return {"ids": ids, "edges": [[i, j, d] for i, j, d in edges]}
 
@@ -593,9 +603,7 @@ def viz_extremes(pc: int = Query(1, ge=1, le=8),
 
     Non-contract debug/demo endpoint. Reuses /viz/tour's top-8 PC cache.
     """
-    ids, matrix = _viz_embedding_corpus()
-    if len(ids) < 2:
-        raise HTTPException(404, "needs at least two tracks")
+    ids, matrix = _viz_embedding_corpus_min2()
     coords8, variance = _top8(matrix)
     col = pc - 1
     values = coords8[:, col]
