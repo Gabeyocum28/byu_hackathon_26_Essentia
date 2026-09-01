@@ -28,20 +28,24 @@ class Head:
     output_node: str
 
 
-HEADS: dict[str, Head] = {
-    "genre":           Head("genre_discogs400-discogs-effnet-1.pb", 400,
-                            "serving_default_model_Placeholder", "PartitionedCall:0"),
-    "moodtheme":       Head("mtg_jamendo_moodtheme-discogs-effnet-1.pb", 56,
-                            "model/Placeholder", "model/Sigmoid"),
-    "mood_happy":      Head("mood_happy-discogs-effnet-1.pb", 2,
-                            "model/Placeholder", "model/Softmax"),
-    "mood_sad":        Head("mood_sad-discogs-effnet-1.pb", 2,
-                            "model/Placeholder", "model/Softmax"),
-    "mood_relaxed":    Head("mood_relaxed-discogs-effnet-1.pb", 2,
-                            "model/Placeholder", "model/Softmax"),
-    "mood_aggressive": Head("mood_aggressive-discogs-effnet-1.pb", 2,
-                            "model/Placeholder", "model/Softmax"),
-}
+# Empty in v1. The three shipping axes — sounds_like, groove, surprise — need
+# only the embedding and the rhythm DSP, so no classification head runs.
+#
+# The table stays because it is the extension point: re-adding an axis that
+# rides on the embedding is one row here plus one FEATURE_KEYS entry, and no
+# other lane changes. Node names must be verified against the actual graph for
+# every head — the TensorflowPredict2D defaults do not hold (spec §2.1). These
+# two were verified and are kept here so re-adding them costs nothing:
+#
+#   "genre":     Head("genre_discogs400-discogs-effnet-1.pb", 400,
+#                     "serving_default_model_Placeholder", "PartitionedCall:0"),
+#   "moodtheme": Head("mtg_jamendo_moodtheme-discogs-effnet-1.pb", 56,
+#                     "model/Placeholder", "model/Sigmoid"),
+#
+# The four binary mood heads used "model/Placeholder" -> "model/Softmax", and
+# disagree on which class index is positive; heads.py resolves that per head
+# from the model's own JSON rather than assuming.
+HEADS: dict[str, Head] = {}
 
 
 def model_url(filename: str) -> str:
