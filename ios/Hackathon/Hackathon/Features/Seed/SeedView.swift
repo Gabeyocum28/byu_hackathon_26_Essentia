@@ -12,9 +12,10 @@ import SwiftUI
 @MainActor
 @Observable
 final class SeedModel {
-    enum LoadState {
+    enum LoadState: Equatable {
         case preparing
         case ready
+        case unanalyzed
         case failed
     }
 
@@ -35,9 +36,9 @@ final class SeedModel {
             // Absorb the blocking seed analysis while the axes load.
             async let seeded = api.seed(trackID: seed.trackID)
             async let axesList = api.axes()
-            _ = try await seeded
+            let seedResponse = try await seeded
             axes = try await axesList
-            state = .ready
+            state = seedResponse.status == "ready" ? .ready : .unanalyzed
         } catch {
             state = .failed
         }
@@ -57,7 +58,11 @@ struct SeedView: View {
 
             switch model.state {
             case .preparing:
-                ProgressView("Analyzing…")
+                ProgressView("Analyzing track…")
+            case .unanalyzed:
+                RetryView(message: "This track hasn't been analyzed yet. Is the embed worker running?") {
+                    Task { await model.prepare() }
+                }
             case .failed:
                 RetryView(message: "Couldn't prepare this track.") {
                     Task { await model.prepare() }

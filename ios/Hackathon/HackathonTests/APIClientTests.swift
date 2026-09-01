@@ -105,4 +105,20 @@ struct APIClientTests {
             _ = try await makeClient().search(query: "x")
         }
     }
+
+    @Test func seedDecodesUnanalyzedStatus() async throws {
+        MockURLProtocol.handler = { _ in
+            (200, Data(#"{ "track_id": "3135556", "status": "unanalyzed" }"#.utf8))
+        }
+        let response = try await makeClient().seed(trackID: "3135556")
+        #expect(response.status == "unanalyzed")
+    }
+
+    @Test func seedRequestAllowsThirtySecondWait() async throws {
+        MockURLProtocol.handler = { _ in
+            (200, Data(#"{ "track_id": "1", "status": "ready" }"#.utf8))
+        }
+        _ = try await makeClient().seed(trackID: "1")
+        #expect(MockURLProtocol.lastRequest?.timeoutInterval == 30)
+    }
 }

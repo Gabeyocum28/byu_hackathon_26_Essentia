@@ -44,11 +44,11 @@ actor APIClient {
         try await get("search", query: [URLQueryItem(name: "q", value: query)], as: TracksResponse.self).results
     }
 
-    /// POST /seed { track_id }. Synchronous per the contract: blocks until the
-    /// seed is analyzed (cold ~1-2s, warm instant).
+    /// POST /seed { track_id }. Blocking on the server: warm instant, cold
+    /// up to ~20s while the embed worker analyzes — hence the long timeout.
     @discardableResult
     func seed(trackID: String) async throws -> SeedResponse {
-        try await post("seed", body: ["track_id": trackID], as: SeedResponse.self)
+        try await post("seed", body: ["track_id": trackID], as: SeedResponse.self, timeout: 30)
     }
 
     /// GET /axes
@@ -78,11 +78,12 @@ actor APIClient {
         return try await send(request, as: type)
     }
 
-    private func post<T: Decodable>(_ path: String, body: [String: String], as type: T.Type) async throws -> T {
+    private func post<T: Decodable>(_ path: String, body: [String: String], as type: T.Type, timeout: TimeInterval? = nil) async throws -> T {
         var request = URLRequest(url: baseURL.appendingPathComponent(path))
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.httpBody = try JSONEncoder().encode(body)
+        if let timeout { request.timeoutInterval = timeout }
         return try await send(request, as: type)
     }
 
