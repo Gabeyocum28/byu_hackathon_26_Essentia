@@ -53,11 +53,13 @@ def clear_matrix_cache():
     from music_recommendations.server import app, viz
 
     app._MATRIX_CACHE.clear()
-    app._PROJECTION_CACHE.clear()
+    app._TOP8_CACHE.clear()
+    app._MST_CACHE.clear()
     viz.clear_geometry_cache()
     yield
     app._MATRIX_CACHE.clear()
-    app._PROJECTION_CACHE.clear()
+    app._TOP8_CACHE.clear()
+    app._MST_CACHE.clear()
     viz.clear_geometry_cache()
 
 

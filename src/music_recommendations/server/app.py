@@ -9,6 +9,7 @@ Routes:
 """
 from __future__ import annotations
 
+import base64
 import json
 import os
 import tempfile
@@ -286,19 +287,43 @@ def recommend(track_id: str, axis: str,
 
 # ---- /viz/map — demo/debug, NOT part of contract/contract.md (like GET /) ----
 
-# The 2D projection of the embedding matrix, kept beside the matrix it was
-# computed from: recomputed only when _corpus_matrix hands back a new object
-# (corpus grew or was rebuilt), served from memory otherwise.
-_PROJECTION_CACHE: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+# The top-8 PC projection of the embedding matrix, kept beside the matrix it
+# was computed from: recomputed only when _corpus_matrix hands back a new
+# object (corpus grew or was rebuilt), served from memory otherwise. One SVD
+# serves /viz/map + /viz/walk (columns 0:2) and /viz/tour + /viz/extremes
+# (all 8 columns) — matrix-identity-pinned like _PAIRWISE_CACHE/_GRAPH_CACHE
+# in viz.py (never key by bare id(matrix): a freed array's address can be
+# reused by a later, differently-sized corpus).
+_TOP8_CACHE: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+
+# The MST edge list of the embedding matrix, matrix-identity-pinned the same
+# way. Not part of contract/contract.md — see /viz/mst below.
+_MST_CACHE: dict[str, tuple[np.ndarray, list[tuple[int, int, float]]]] = {}
+
+
+def _top8(matrix: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    cached = _TOP8_CACHE.get("embedding")
+    if cached is not None and cached[0] is matrix:
+        return cached[1], cached[2]
+    coords8, variance = viz.project_top8(matrix)
+    _TOP8_CACHE["embedding"] = (matrix, coords8, variance)
+    return coords8, variance
 
 
 def _projection(matrix: np.ndarray) -> np.ndarray:
-    cached = _PROJECTION_CACHE.get("embedding")
+    """First two PC columns — numerically identical to viz.project_2d's
+    output, since /viz/map's xy must not change when this cache was added."""
+    coords8, _ = _top8(matrix)
+    return coords8[:, :2]
+
+
+def _mst(matrix: np.ndarray) -> list[tuple[int, int, float]]:
+    cached = _MST_CACHE.get("embedding")
     if cached is not None and cached[0] is matrix:
         return cached[1]
-    xy = viz.project_2d(matrix)
-    _PROJECTION_CACHE["embedding"] = (matrix, xy)
-    return xy
+    edges = viz.minimum_spanning_tree(matrix)
+    _MST_CACHE["embedding"] = (matrix, edges)
+    return edges
 
 
 @app.get("/viz/map")
@@ -522,6 +547,68 @@ def viz_hubs(k: int = Query(8, ge=1, le=50),
             {"track_id": track_id, "count": int(count)}
             for track_id, count in zip(ids, counts)
         ],
+    }
+
+
+@app.get("/viz/tour")
+def viz_tour() -> dict:
+    """Per-track top-8 PC coordinates + variance explained (T2.1).
+
+    Non-contract debug/demo endpoint, like /viz/map and /viz/hubs. Columns
+    0-1 of coords8 are numerically identical to /viz/map's x/y — same SVD,
+    same sign convention, same matrix-pinned cache (_TOP8_CACHE).
+    """
+    ids, matrix = _viz_embedding_corpus()
+    if len(ids) < 2:
+        raise HTTPException(404, "needs at least two tracks")
+    coords8, variance = _top8(matrix)
+    coords8_b64 = base64.b64encode(
+        np.asarray(coords8, dtype="<f4").tobytes()
+    ).decode("ascii")
+    return {
+        "ids": ids,
+        "coords8": coords8_b64,
+        "variance": [float(v) for v in variance],
+    }
+
+
+@app.get("/viz/mst")
+def viz_mst() -> dict:
+    """The n-1 MST edges over cosine distance — Prim in numpy (T2.2).
+
+    Non-contract debug/demo endpoint. The H0 barcode's death times are
+    exactly these edge weights.
+    """
+    ids, matrix = _viz_embedding_corpus()
+    if len(ids) < 2:
+        raise HTTPException(404, "needs at least two tracks")
+    edges = _mst(matrix)
+    return {"ids": ids, "edges": [[i, j, d] for i, j, d in edges]}
+
+
+@app.get("/viz/extremes")
+def viz_extremes(pc: int = Query(1, ge=1, le=8),
+                 limit: int = Query(4, ge=1, le=10)) -> dict:
+    """Top/bottom tracks along one principal component (T2.4).
+
+    Non-contract debug/demo endpoint. Reuses /viz/tour's top-8 PC cache.
+    """
+    ids, matrix = _viz_embedding_corpus()
+    if len(ids) < 2:
+        raise HTTPException(404, "needs at least two tracks")
+    coords8, variance = _top8(matrix)
+    col = pc - 1
+    values = coords8[:, col]
+
+    k = min(limit, len(ids))
+    low_order = np.argsort(values, kind="stable")          # most negative first
+    high_order = np.argsort(-values, kind="stable")         # most positive first
+
+    return {
+        "pc": pc,
+        "variance_pct": float(variance[col] * 100.0),
+        "low": [_viz_track(ids[i]) for i in low_order[:k]],
+        "high": [_viz_track(ids[i]) for i in high_order[:k]],
     }
 
 
