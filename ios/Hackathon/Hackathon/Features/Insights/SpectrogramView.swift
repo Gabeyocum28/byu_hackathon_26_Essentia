@@ -252,6 +252,12 @@ struct SpectrogramView: View {
             bandDragStart = nil
             bandSoloPlayer.stop()
         }
+        .onDisappear {
+            // Leaving this screen must not leave a solo playing audibly
+            // behind it — ARC deinit timing on the @State object isn't
+            // prompt enough to rely on for that.
+            bandSoloPlayer.stop()
+        }
     }
 
     // MARK: - Spectrogram + band-select strip
@@ -357,21 +363,28 @@ struct SpectrogramView: View {
     }
 
     private var soloControls: some View {
-        HStack(spacing: 8) {
-            Button(action: toggleSolo) {
-                HStack(spacing: 4) {
-                    if isBuildingSolo {
-                        ProgressView().controlSize(.small)
-                    } else {
-                        Image(systemName: bandSoloPlayer.isPlaying ? "stop.fill" : "play.fill")
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 8) {
+                Button(action: toggleSolo) {
+                    HStack(spacing: 4) {
+                        if isBuildingSolo {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Image(systemName: bandSoloPlayer.isPlaying ? "stop.fill" : "play.fill")
+                        }
+                        Text(soloLabel)
                     }
-                    Text(soloLabel)
+                    .font(.caption.weight(.semibold))
                 }
-                .font(.caption.weight(.semibold))
+                .buttonStyle(.bordered)
+                .disabled(isBuildingSolo)
+                Spacer()
             }
-            .buttonStyle(.bordered)
-            .disabled(isBuildingSolo)
-            Spacer()
+            if let errorMessage = bandSoloPlayer.errorMessage {
+                Text(errorMessage)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+            }
         }
     }
 
