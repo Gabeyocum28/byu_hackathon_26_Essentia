@@ -29,7 +29,7 @@ def _to_track(item: dict) -> dict:
     }
 
 
-def search(query: str, limit: int = 10) -> list[dict]:
+def search(query: str, limit: int = 25) -> list[dict]:
     """Search Deezer and return contract-shaped Track dicts (preview required)."""
     q = urllib.parse.urlencode({"q": query, "limit": limit})
     data = _get_json(f"{API}/search?{q}").get("data", [])
