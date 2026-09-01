@@ -209,3 +209,34 @@ def test_process_attribution_caches_failure_so_the_phone_stops_polling(fake_redi
     cached = store.get_attribution("42", "43")
     assert cached["status"] == "failed"
     assert cached["error"]
+
+
+def test_attribution_scales_every_band_by_the_original_peak(fake_redis, embedding_stub,
+                                                            monkeypatch, tmp_path):
+    """Each counterfactual must be written at the SAME gain, or the loudest
+    bands get the most make-up gain and the deltas measure our normalizer."""
+    import numpy as np
+    import wave as wave_mod
+
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+
+    written = []
+    original_write = worker._write_wav
+
+    def spy(samples, sample_rate, scale):
+        path = original_write(samples, sample_rate, scale)
+        with wave_mod.open(str(path), "rb") as src:
+            raw = src.readframes(src.getnframes())
+        written.append(np.abs(np.frombuffer(raw, dtype="<i2")).max())
+        return path
+
+    monkeypatch.setattr(worker, "_write_wav", spy)
+    assert worker.process_attribution("42", "43") is True
+
+    # Removing different amounts of energy must leave different peaks; if
+    # every file came out at full scale, each was normalized to itself.
+    assert len(written) == 10
+    assert len(set(written)) > 1
+    assert max(written) <= 32767

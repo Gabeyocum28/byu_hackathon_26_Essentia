@@ -76,15 +76,20 @@ def process_job(track_id: str) -> bool:
             pass
 
 
-def _write_wav(samples: "np.ndarray", sample_rate: int) -> Path:
-    """16-bit PCM temp file: MonoLoader wants a path, not an array."""
+def _write_wav(samples: "np.ndarray", sample_rate: int, scale: float) -> Path:
+    """16-bit PCM temp file: MonoLoader wants a path, not an array.
+
+    `scale` is the ORIGINAL track's peak, shared by every band. Normalizing
+    each band-stopped signal to its own peak would hand the loudest bands
+    the most make-up gain, and the model would read that level change as
+    part of the attribution — measuring our own normalizer, not the band.
+    """
     import numpy as np
 
     fd, name = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     path = Path(name)
-    peak = float(np.max(np.abs(samples))) or 1.0
-    pcm = np.clip(samples / peak * 0.98, -1.0, 1.0)
+    pcm = np.clip(samples / (scale or 1.0) * 0.98, -1.0, 1.0)
     with wave.open(str(path), "wb") as out:
         out.setnchannels(1)
         out.setsampwidth(2)
@@ -131,12 +136,13 @@ def process_attribution(seed_id: str, rec_id: str) -> bool:
             raise ValueError("no seed metadata in Redis or on Deezer")
         mp3 = download_preview(track["preview_url"])
         audio = embed_mod.load_audio(mp3)          # mono, 16 kHz — model rate
+        scale = float(np.max(np.abs(audio)))
 
         bands = []
         for lo_hz, hi_hz in viz.band_edges():
             started = time.monotonic()
             filtered = viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz)
-            wav = _write_wav(filtered, embed_mod.SAMPLE_RATE)
+            wav = _write_wav(filtered, embed_mod.SAMPLE_RATE, scale)
             try:
                 occluded = embed_mod.effnet_frames(wav).mean(axis=0)
             finally:
