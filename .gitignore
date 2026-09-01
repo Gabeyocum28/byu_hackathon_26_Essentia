@@ -14,3 +14,6 @@ ios/**/xcuserdata/
 legacy/samples/
 legacy/graph.json
 legacy/sound_connections.html
+
+# Redis snapshot from ad-hoc local redis-server
+dump.rdb
