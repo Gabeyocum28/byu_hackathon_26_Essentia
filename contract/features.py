@@ -14,7 +14,6 @@ TRACK_FIELDS = frozenset(
 AXES = [
     {"id": "sounds_like", "label": "Sounds like this"},
     {"id": "mood",        "label": "Keep the feeling"},
-    {"id": "genre",       "label": "Keep the style"},
     {"id": "groove",      "label": "Keep the groove"},
     {"id": "surprise",    "label": "Surprise me"},
 ]
@@ -23,7 +22,6 @@ AXES = [
 # Arrays are 1-D float lists/ndarrays of the stated length; scalars are float.
 FEATURE_KEYS = {
     "embedding": 1280,   # EffNet penultimate, frame-mean
-    "genre": 400,        # genre_discogs400 head activations
     "moodtheme": 56,     # mtg_jamendo_moodtheme sigmoid activations
     "mood_happy": 1, "mood_sad": 1, "mood_relaxed": 1, "mood_aggressive": 1,
     "groove": 4,         # [bpm, beats_confidence, onset_rate, danceability]
