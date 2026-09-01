@@ -354,6 +354,12 @@ struct InsightsView: View {
                 .pickerStyle(.segmented)
                 .onChange(of: model.mode) { _, mode in model.activate(mode) }
 
+                // The strip picks which track everything below is about, so
+                // it sits above the analysis rather than under a screenful
+                // of it — on Sound especially, the spectrogram and the
+                // matrix pushed it off the bottom of the page.
+                recPicker(model.displayMap ?? map)
+
                 switch model.mode {
                 case .galaxy:
                     galaxyMode(model.displayMap ?? map)
@@ -362,8 +368,6 @@ struct InsightsView: View {
                 case .proof:
                     proofMode(model.displayMap ?? map)
                 }
-
-                recPicker(model.displayMap ?? map)
             }
             .padding()
         }
