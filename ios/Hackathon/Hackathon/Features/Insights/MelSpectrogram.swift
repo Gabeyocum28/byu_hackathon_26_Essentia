@@ -10,7 +10,7 @@
 import Accelerate
 import Foundation
 
-struct MelSpectrogram {
+nonisolated struct MelSpectrogram {
     /// Silence clamps to exactly this dB value.
     static let dbFloor: Float = -80
 
@@ -63,11 +63,11 @@ struct MelSpectrogram {
 
     // MARK: - Mel scale
 
-    static func mel(fromHz hz: Double) -> Double {
+    nonisolated static func mel(fromHz hz: Double) -> Double {
         2595 * log10(1 + hz / 700)
     }
 
-    static func hz(fromMel mel: Double) -> Double {
+    nonisolated static func hz(fromMel mel: Double) -> Double {
         700 * (pow(10, mel / 2595) - 1)
     }
 

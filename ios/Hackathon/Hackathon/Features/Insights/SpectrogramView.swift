@@ -75,8 +75,13 @@ final class SpectrogramLoader {
 
     // MARK: - Render
 
-    private nonisolated static func render(samples: [Float],
-                                           sampleRate: Double) async -> CGImage? {
+    // @concurrent: with default-MainActor isolation plus approachable
+    // concurrency, a plain nonisolated async func would still run on the
+    // caller's (main) actor — this FFT pass must actually leave the main
+    // thread or the whole screen hitches while a spectrogram computes.
+    @concurrent
+    private static func render(samples: [Float],
+                               sampleRate: Double) async -> CGImage? {
         let spectrogram = MelSpectrogram(bands: 96, sampleRate: sampleRate,
                                          fftSize: 2048, hop: 1024)
         let frames = spectrogram.compute(samples: samples)

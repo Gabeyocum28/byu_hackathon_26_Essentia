@@ -29,6 +29,20 @@ struct WalkEndpoints: Equatable {
     let to: String
 }
 
+private enum InsightsLoadError: LocalizedError {
+    case unanalyzedCorpus
+    case mapUnavailable(Error)
+
+    var errorDescription: String? {
+        switch self {
+        case .unanalyzedCorpus:
+            return "This track is not analyzed on the server yet."
+        case .mapUnavailable(let error):
+            return "The math view could not load: \(error.localizedDescription)"
+        }
+    }
+}
+
 @MainActor
 @Observable
 final class InsightsModel {
@@ -62,22 +76,42 @@ final class InsightsModel {
     func load() async {
         isLoading = true
         errorMessage = nil
+        proofError = nil
         do {
-            let map = try await api.vizMap(trackID: seed.trackID, axis: axis.id)
-            self.map = map
-            selected = map.recs.first
-            if let rec = map.recs.first {
-                focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
-            }
+            try await loadPrimaryMap()
             histogram = try? await api.vizHistogram(trackID: seed.trackID)
             hubs = try? await api.vizHubs()
             proofMap = try? await api.vizMap(
                 trackID: seed.trackID, axis: "surprise", correction: true
             )
         } catch {
-            errorMessage = "The math needs an analyzed corpus — is the server up?"
+            print("[Insights] load failed for seed \(seed.trackID) axis \(axis.id): \(error)")
+            errorMessage = (error as? LocalizedError)?.errorDescription
+                ?? "The math needs an analyzed corpus — is the server up?"
         }
         isLoading = false
+    }
+
+    private func loadPrimaryMap() async throws {
+        let seedResponse = try await api.seed(trackID: seed.trackID)
+        print("[Insights] seed status for \(seed.trackID): \(seedResponse.status)")
+        guard seedResponse.status == "ready" else {
+            throw InsightsLoadError.unanalyzedCorpus
+        }
+        do {
+            let map = try await api.vizMap(trackID: seed.trackID, axis: axis.id)
+            applyMap(map)
+        } catch {
+            throw InsightsLoadError.mapUnavailable(error)
+        }
+    }
+
+    private func applyMap(_ map: VizMap) {
+        self.map = map
+        selected = map.recs.first
+        if let rec = map.recs.first {
+            focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
+        }
     }
 
     /// One intent keeps the visual selection and audible selection together.
