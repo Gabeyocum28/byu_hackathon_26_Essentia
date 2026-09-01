@@ -1,4 +1,7 @@
 models/
+# iOS Swift source folder — case-insensitive filesystems (macOS) match it
+# against the `models/` ML-artifact rule above, so re-include it explicitly.
+!ios/Hackathon/Hackathon/Models/
 audio_cache/
 .venv/
 venv/
