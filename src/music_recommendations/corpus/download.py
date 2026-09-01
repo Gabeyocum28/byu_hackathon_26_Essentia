@@ -1,13 +1,20 @@
 """Preview downloads into audio_cache/. Signed URLs expire; retry once fresh."""
 from __future__ import annotations
 
+import os
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 from music_recommendations.corpus import deezer
 
-AUDIO_CACHE = Path(__file__).resolve().parents[3] / "audio_cache"
+# Overridable because the repo may live somewhere that syncs: a few thousand
+# previews is several GB, and iCloud does not read .gitignore. Point
+# AUDIO_CACHE_DIR somewhere local before a large run.
+AUDIO_CACHE = Path(
+    os.environ.get("AUDIO_CACHE_DIR")
+    or Path(__file__).resolve().parents[3] / "audio_cache"
+).expanduser()
 TIMEOUT = 45
 MIN_BYTES = 10_000  # anything smaller is an error page, not 30s of audio
 
