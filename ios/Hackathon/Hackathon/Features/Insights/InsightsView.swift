@@ -20,6 +20,8 @@ enum InsightMode: String, CaseIterable, Identifiable {
 enum GalaxyMode: String, CaseIterable, Identifiable {
     case explore = "Explore"
     case walk = "Walk"
+    case tour = "Tour"
+    case topo = "Topo"
 
     var id: String { rawValue }
 }
@@ -63,6 +65,15 @@ final class InsightsModel {
     var isLoading = true
     var errorMessage: String?
     var proofError: String?
+
+    // T2: Tour, Topology, eigen-listening — additive, fetched lazily so a
+    // seed that never opens these modes never pays for them.
+    var tour: VizTour?
+    var tourError: String?
+    var mst: VizMST?
+    var topoError: String?
+    var extremesByPC: [Int: VizExtremesResponse] = [:]
+    var extremesErrors: [Int: String] = [:]
 
     private let api: APIClient
     private var correctionRequestGeneration = 0
@@ -209,6 +220,36 @@ final class InsightsModel {
             proofError = "The correction comparison could not be loaded."
         }
     }
+
+    // MARK: - T2 lazy loads
+
+    func loadTourIfNeeded() async {
+        guard tour == nil, tourError == nil else { return }
+        do {
+            tour = try await api.vizTour()
+        } catch {
+            tourError = "The grand tour could not be loaded."
+        }
+    }
+
+    func loadTopologyIfNeeded() async {
+        await loadTourIfNeeded()
+        guard mst == nil, topoError == nil else { return }
+        do {
+            mst = try await api.vizMST()
+        } catch {
+            topoError = "The topology graph could not be loaded."
+        }
+    }
+
+    func loadExtremesIfNeeded(pc: Int) async {
+        guard extremesByPC[pc] == nil, extremesErrors[pc] == nil else { return }
+        do {
+            extremesByPC[pc] = try await api.vizExtremes(pc: pc, limit: 4)
+        } catch {
+            extremesErrors[pc] = "unavailable"
+        }
+    }
 }
 
 struct InsightsView: View {
@@ -268,38 +309,74 @@ struct InsightsView: View {
                 ForEach(GalaxyMode.allCases) { mode in Text(mode.rawValue).tag(mode) }
             }
             .pickerStyle(.segmented)
-            .onChange(of: model.galaxyMode) { _, mode in model.setGalaxyMode(mode) }
-
-            Text(model.galaxyMode == .walk
-                 ? (model.walkStart == nil ? "Tap a start star" : "Tap a destination star")
-                 : "\(map.points.ids.count) tracks · pinch, pan, tap any star")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-
-            GalaxyMapView(
-                map: map,
-                selectedTrackID: model.focusedPoint?.id,
-                walk: model.walk,
-                walkProgress: model.walkProgress,
-                onSelect: { point in Task { await model.selectGalaxyPoint(point) } }
-            )
-            .aspectRatio(1, contentMode: .fit)
-            .background(.black, in: .rect(cornerRadius: 12))
-
-            if let point = model.focusedPoint { galaxyCallout(point) }
-            if let walk = model.walk {
-                WalkStrip(walk: walk) { step in
-                    let point = GalaxySelection(track: step.track, x: step.x, y: step.y)
-                    model.focus(point)
-                    playback.toggle(step.track)
+            .onChange(of: model.galaxyMode) { _, mode in
+                model.setGalaxyMode(mode)
+                switch mode {
+                case .tour: Task { await model.loadTourIfNeeded() }
+                case .topo: Task { await model.loadTopologyIfNeeded() }
+                case .explore, .walk: break
                 }
             }
+
+            galaxyCaption(map)
+
+            switch model.galaxyMode {
+            case .explore, .walk:
+                GalaxyMapView(
+                    map: map,
+                    selectedTrackID: model.focusedPoint?.id,
+                    walk: model.walk,
+                    walkProgress: model.walkProgress,
+                    onSelect: { point in Task { await model.selectGalaxyPoint(point) } }
+                )
+                .aspectRatio(1, contentMode: .fit)
+                .background(.black, in: .rect(cornerRadius: 12))
+
+                if let point = model.focusedPoint { galaxyCallout(point) }
+                if let walk = model.walk {
+                    WalkStrip(walk: walk) { step in
+                        let point = GalaxySelection(track: step.track, x: step.x, y: step.y)
+                        model.focus(point)
+                        playback.toggle(step.track)
+                    }
+                }
+
+            case .tour:
+                TourView(tour: model.tour, errorMessage: model.tourError)
+
+            case .topo:
+                TopologyView(
+                    tour: model.tour, mst: model.mst,
+                    tourError: model.tourError, mstError: model.topoError
+                )
+            }
         }
+    }
+
+    private func galaxyCaption(_ map: VizMap) -> some View {
+        let text: String
+        switch model.galaxyMode {
+        case .walk:
+            text = model.walkStart == nil ? "Tap a start star" : "Tap a destination star"
+        case .tour:
+            text = "Rotating an orthonormal 2-frame through 8-d PCA space \u{2014} clusters that persist are real"
+        case .topo:
+            text = "Single-linkage clustering = MST = H0 persistence \u{2014} drag the threshold"
+        case .explore:
+            text = "\(map.points.ids.count) tracks · pinch, pan, tap any star"
+        }
+        return Text(text)
+            .font(.caption)
+            .foregroundStyle(.secondary)
     }
 
     private func soundMode(_ map: VizMap) -> some View {
         VStack(alignment: .leading, spacing: 16) {
             SpectrogramView(track: spotlightTrack(map))
+            EigenListeningView(model: model) { track in
+                model.focus(track)
+                playback.toggle(track)
+            }
             if let rec = model.selected {
                 MathPanel(seed: map.seed, rec: rec, axis: map.axis)
             }

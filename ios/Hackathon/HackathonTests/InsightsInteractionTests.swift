@@ -85,6 +85,47 @@ struct InsightsInteractionTests {
         ) == nil)
     }
 
+    // MARK: - Fixed-radius PointTransform (review finding 2: the Grand Tour
+    // must not rescale/"breathe" as the rotating projection's bounding box
+    // changes shape frame to frame; the fix holds scale/center fixed from a
+    // rotation-invariant radius instead of scanning the live points).
+
+    @Test func fixedRadiusTransformCentersTheOriginRegardlessOfProjectedExtent() {
+        let transform = PointTransform(radius: 5, size: CGSize(width: 200, height: 200))
+        let center = transform.place(x: 0, y: 0)
+        #expect(center.x == 100)
+        #expect(center.y == 100)
+    }
+
+    @Test func fixedRadiusTransformScaleDoesNotChangeWithDifferentPointSets() {
+        // Same radius, two very different "current rotation" point clouds:
+        // the transform (and thus scale/center) must be identical for both,
+        // since it's built from the radius alone.
+        let a = PointTransform(radius: 4, size: CGSize(width: 200, height: 200))
+        let b = PointTransform(radius: 4, size: CGSize(width: 200, height: 200))
+        #expect(a.place(x: 2, y: -2) == b.place(x: 2, y: -2))
+        #expect(a.place(x: 0.1, y: 3.9) == b.place(x: 0.1, y: 3.9))
+    }
+
+    @Test func fixedRadiusTransformPlacesAPointAtTheRadiusNearTheEdge() {
+        let radius = 5.0
+        let transform = PointTransform(radius: radius, size: CGSize(width: 200, height: 200))
+        let center = transform.place(x: 0, y: 0)
+        let edge = transform.place(x: radius, y: 0)
+        // fit = min(200,200) - 2*16 = 168; span = 2*radius = 10; scale = 16.8
+        #expect(abs((edge.x - center.x) - 84) < 0.001)
+    }
+
+    @Test func explicitBoundsTransformMatchesTheArrayScanningInitializer() {
+        let x: [Double] = [-2, 0, 3]
+        let y: [Double] = [-1, 4, 1]
+        let scanned = PointTransform(x: x, y: y, size: CGSize(width: 300, height: 150))
+        let explicit = PointTransform(
+            minX: -2, maxX: 3, minY: -1, maxY: 4, size: CGSize(width: 300, height: 150)
+        )
+        #expect(scanned.place(x: 1, y: 2) == explicit.place(x: 1, y: 2))
+    }
+
     @Test func walkSelectionUsesTwoDistinctGalaxyStarsAsEndpoints() throws {
         let model = InsightsModel(
             seed: seed,
