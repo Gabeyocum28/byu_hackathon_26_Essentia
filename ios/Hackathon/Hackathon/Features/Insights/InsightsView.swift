@@ -75,8 +75,18 @@ final class InsightsModel {
     var extremesByPC: [Int: VizExtremesResponse] = [:]
     var extremesErrors: [Int: String] = [:]
 
+    /// T2.6: the seed-vs-selected-rec band attribution, the pair it belongs
+    /// to, and whether we gave up waiting for the worker.
+    var attribution: VizAttribution?
+    var attributionPairID: String?
+    var attributionSilent = false
+    /// Set when a bar is tapped; SpectrogramView watches it and solos.
+    var soloRequest: BandSoloRequest?
+
     private let api: APIClient
     private var correctionRequestGeneration = 0
+    private var attributionTask: Task<Void, Never>?
+    private var soloToken = 0
 
     init(seed: Track, axis: Axis, api: APIClient = .shared) {
         self.seed = seed
@@ -123,6 +133,58 @@ final class InsightsModel {
         if let rec = map.recs.first {
             focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
         }
+    }
+
+    // MARK: - T2.6 attribution
+
+    /// Poll cadence and ceiling for /viz/attribute: the worker runs ~10
+    /// forward passes per pair, so a first answer takes seconds, and a
+    /// worker that is simply not running must not poll forever.
+    private static let attributionPollInterval = Duration.milliseconds(1500)
+    private static let attributionDeadline: Duration = .seconds(60)
+
+    /// Fetches the seed-vs-rec band attribution, polling while the worker
+    /// computes it. Cancels any in-flight request for a different pair.
+    func loadAttribution(for rec: VizMap.Rec?) async {
+        attributionTask?.cancel()
+        guard let rec else {
+            attribution = nil
+            attributionPairID = nil
+            return
+        }
+        let pairID = "\(seed.trackID)|\(rec.trackID)"
+        guard pairID != attributionPairID || attribution?.isReady != true else { return }
+
+        attributionPairID = pairID
+        attribution = nil
+        attributionSilent = false
+
+        let task = Task { [api, seed] in
+            let deadline = ContinuousClock.now + Self.attributionDeadline
+            while !Task.isCancelled {
+                let answer = try? await api.vizAttribute(seed: seed.trackID,
+                                                         rec: rec.trackID)
+                guard !Task.isCancelled, attributionPairID == pairID else { return }
+                if let answer, !answer.isPending {
+                    attribution = answer
+                    return
+                }
+                if ContinuousClock.now >= deadline {
+                    attributionSilent = true
+                    return
+                }
+                try? await Task.sleep(for: Self.attributionPollInterval)
+            }
+        }
+        attributionTask = task
+        await task.value
+    }
+
+    /// Tapping a bar solos that band in whatever the spectrogram is showing.
+    func solo(_ band: VizAttribution.Band) {
+        soloToken += 1
+        soloRequest = BandSoloRequest(loHz: band.loHz, hiHz: band.hiHz,
+                                      token: soloToken)
     }
 
     /// One intent keeps the visual selection and audible selection together.
@@ -372,7 +434,17 @@ struct InsightsView: View {
 
     private func soundMode(_ map: VizMap) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            SpectrogramView(track: spotlightTrack(map))
+            SpectrogramView(track: spotlightTrack(map),
+                            soloRequest: model.soloRequest)
+            if let rec = model.selected {
+                WhySimilarView(
+                    recTitle: rec.title,
+                    attribution: model.attribution,
+                    isWorkerSilent: model.attributionSilent,
+                    onSolo: { band in model.solo(band) }
+                )
+                .task(id: rec.trackID) { await model.loadAttribution(for: rec) }
+            }
             EigenListeningView(model: model) { track in
                 model.focus(track)
                 playback.toggle(track)

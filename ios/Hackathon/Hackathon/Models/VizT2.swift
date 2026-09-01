@@ -124,3 +124,41 @@ nonisolated struct VizExtremesResponse: Decodable {
         case low, high
     }
 }
+
+/// Payload of GET /viz/attribute (T2.6) — which frequency bands carry a
+/// pair's similarity, measured by deleting each band from the seed and
+/// pushing the counterfactual back through the model.
+///
+/// The route is a mailbox: the first request queues the pair and answers
+/// `pending`, so the client polls until `ready` (or `failed`).
+nonisolated struct VizAttribution: Decodable {
+    struct Band: Decodable, Identifiable {
+        let loHz: Double
+        let hiHz: Double
+        /// How far the pair's cosine fell when this band was deleted.
+        let delta: Double
+
+        var id: String { "\(loHz)-\(hiHz)" }
+
+        enum CodingKeys: String, CodingKey {
+            case loHz = "lo_hz"
+            case hiHz = "hi_hz"
+            case delta
+        }
+    }
+
+    let status: String
+    /// The unoccluded cosine; absent while pending.
+    let base: Double?
+    let bands: [Band]?
+    let error: String?
+
+    var isReady: Bool { status == "ready" }
+    var isPending: Bool { status == "pending" }
+
+    /// Deltas are not additive — bands interact inside the network — so the
+    /// bars are scaled against the largest drop, not against their sum.
+    var largestDrop: Double {
+        max(bands?.map(\.delta).max() ?? 0, 0)
+    }
+}

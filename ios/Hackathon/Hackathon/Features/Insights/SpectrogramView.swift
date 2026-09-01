@@ -214,8 +214,19 @@ final class SpectrogramLoader {
     }
 }
 
+/// An outside request to solo an explicit Hz range — the attribution bars
+/// (T2.6) tapping into the band-solo machinery the drag strip already uses.
+/// `token` changes on every tap so soloing the same band twice re-fires.
+struct BandSoloRequest: Equatable {
+    let loHz: Double
+    let hiHz: Double
+    let token: Int
+}
+
 struct SpectrogramView: View {
     let track: Track
+    /// Set by the "why similar?" bars; nil when nothing external asked.
+    var soloRequest: BandSoloRequest?
     @State private var loader = SpectrogramLoader()
     @State private var draggedProgress: Double?
 
@@ -251,6 +262,10 @@ struct SpectrogramView: View {
             selectedBandRange = nil
             bandDragStart = nil
             bandSoloPlayer.stop()
+        }
+        .onChange(of: soloRequest) { _, request in
+            guard let request else { return }
+            play(loHz: request.loHz, hiHz: request.hiHz)
         }
         .onDisappear {
             // Leaving this screen must not leave a solo playing audibly
@@ -403,12 +418,17 @@ struct SpectrogramView: View {
             return
         }
         guard let hz = loader.hzRange(forBands: range) else { return }
+        play(loHz: hz.lo, hiHz: hz.hi)
+    }
+
+    private func play(loHz: Double, hiHz: Double) {
         // Band-solo owns audio output while it plays; the shared preview
         // yields rather than fighting it for the AVAudioSession.
+        bandSoloPlayer.stop()
         playback.pause()
         isBuildingSolo = true
         Task {
-            let result = await loader.soloBuffer(loHz: hz.lo, hiHz: hz.hi)
+            let result = await loader.soloBuffer(loHz: loHz, hiHz: hiHz)
             isBuildingSolo = false
             guard let result else { return }
             bandSoloPlayer.play(samples: result.samples, sampleRate: result.sampleRate)

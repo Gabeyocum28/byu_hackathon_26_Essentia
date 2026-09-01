@@ -104,6 +104,15 @@ actor APIClient {
         try await get("viz/tour", as: VizTour.self)
     }
 
+    /// GET /viz/attribute — per-band occlusion attribution for one pair.
+    /// Answers `pending` until the Mac worker has run the counterfactuals.
+    func vizAttribute(seed: String, rec: String) async throws -> VizAttribution {
+        try await get("viz/attribute", query: [
+            URLQueryItem(name: "seed", value: seed),
+            URLQueryItem(name: "rec", value: rec),
+        ], as: VizAttribution.self)
+    }
+
     /// GET /viz/mst — minimum spanning tree over cosine distance (H0 barcode).
     func vizMST() async throws -> VizMST {
         try await get("viz/mst", as: VizMST.self)
