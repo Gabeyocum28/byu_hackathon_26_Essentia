@@ -94,6 +94,18 @@ def _process_track(track: dict) -> tuple[str, str]:
         return tid, str(exc)[:200]
 
 
+def progress_line(n: int, total: int, track: dict, err: str, rate: float) -> str:
+    tid = track["track_id"]
+    if err:
+        return f"[{n}/{total}] {tid}: FAILED — {err}"
+    label = track.get("artist", "")
+    if label:
+        label += " — " + track.get("title", "")[:35]
+    else:
+        label = "pushed"
+    return f"[{n}/{total}] {tid}: {label} ({rate:.0f}/min)"
+
+
 def run_parallel(tracks: list[dict], workers: int) -> list[str]:
     """Analyze+push tracks across worker processes; returns failed ids."""
     import multiprocessing as mp
@@ -108,14 +120,11 @@ def run_parallel(tracks: list[dict], workers: int) -> list[str]:
         futures = {pool.submit(_process_track, t): t for t in tracks}
         for n, fut in enumerate(as_completed(futures), 1):
             tid, err = fut.result()
-            t = futures[fut]
             rate = n / (time.time() - start) * 60
             if err:
                 failures.append(tid)
-                print(f"[{n}/{len(tracks)}] {tid}: FAILED — {err}")
-            else:
-                print(f"[{n}/{len(tracks)}] {tid}: {t['artist']} — "
-                      f"{t['title'][:35]} ({rate:.0f}/min)")
+            print(progress_line(n, len(tracks), futures[fut], err, rate),
+                  flush=True)
     return failures
 
 

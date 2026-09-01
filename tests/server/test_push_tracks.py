@@ -85,3 +85,17 @@ def test_process_track_refreshes_preview_url(monkeypatch):
     tid, err = push._process_track(stale)
     assert err == ""
     assert seen["preview_url"] == "http://x/fresh.mp3"
+
+
+def test_progress_line_handles_bare_id_dicts():
+    """The retry path queues {"track_id": id} only; the progress line must
+    not KeyError on missing artist/title (it killed the retry run's logs)."""
+    line = push.progress_line(1, 2, {"track_id": "9"}, err="", rate=88.0)
+    assert "9" in line and "[1/2]" in line
+
+
+def test_progress_line_with_full_track_and_failure():
+    full = push.progress_line(2, 2, TRACK, err="", rate=90.0)
+    assert "Miles Davis" in full
+    failed = push.progress_line(2, 2, {"track_id": "9"}, err="boom", rate=0)
+    assert "FAILED" in failed and "boom" in failed
