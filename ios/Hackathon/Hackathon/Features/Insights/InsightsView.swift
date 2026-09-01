@@ -214,9 +214,12 @@ final class InsightsModel {
     }
 
     var displayMap: VizMap? {
-        // The correction is a map-level comparison, so the Galaxy, proof
-        // panel, callout, and recommendation strip always share one result.
-        proofMap ?? map
+        // Only Proof mode follows proofMap. It is a second map on the
+        // surprise axis, loaded so the hubness toggle has something to
+        // compare, and letting it lead everywhere replaced the user's own
+        // axis: you picked "sounds like" and the galaxy and rec strip
+        // showed surprise picks instead.
+        mode == .proof ? (proofMap ?? map) : map
     }
 
     func activate(_ mode: InsightMode) {
