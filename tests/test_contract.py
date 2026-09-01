@@ -14,7 +14,11 @@ def _features():
 
 def test_axes_ids_match_spec():
     f = _features()
-    assert [a["id"] for a in f.AXES] == ["sounds_like", "groove", "surprise"]
+    # best_match was added after the spec's original three: it blends the
+    # embedding and groove percentiles rather than ranking on one key.
+    assert [a["id"] for a in f.AXES] == [
+        "sounds_like", "groove", "surprise", "best_match",
+    ]
 
 
 def test_track_fields():

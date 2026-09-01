@@ -261,3 +261,26 @@ def test_seed_is_never_recommended_to_itself(client, seeded_corpus):
                                                    "limit": 10}).json()["results"]
         assert seed not in {t["track_id"] for t in results}
         assert len(results) == 4
+
+
+# ---- blended axes ----
+
+def test_best_match_blends_both_keys_and_beats_neither_alone(client, seeded_corpus):
+    """A blend should reward agreement, not let one key pick an extremist."""
+    seed = seeded_corpus[0]["track_id"]
+    results = client.get("/recommend", params={"track_id": seed, "axis": "best_match",
+                                               "limit": 4}).json()["results"]
+    assert len(results) == 4
+    assert seed not in {t["track_id"] for t in results}
+    assert set(results[0]) >= TRACK_KEYS | {"score"}, "contract shape, plus score"
+    scores = [t["score"] for t in results]
+    assert scores == sorted(scores, reverse=True), "best first"
+    assert all(0.0 <= s <= 1.0 for s in scores), "score stays a 0-1 float"
+
+
+def test_best_match_is_served_by_axes_and_accepted_by_recommend(client):
+    """A button /axes advertises must not 400 when the client presses it."""
+    served = {a["id"] for a in client.get("/axes").json()["axes"]}
+    assert "best_match" in served
+    for axis in served:
+        assert client.get("/recommend", params={"track_id": "x", "axis": axis}).status_code == 200

@@ -15,6 +15,7 @@ AXES = [
     {"id": "sounds_like", "label": "Sounds like this"},
     {"id": "groove",      "label": "Keep the groove"},
     {"id": "surprise",    "label": "Surprise me"},
+    {"id": "best_match",  "label": "Best match"},
 ]
 
 # analyze_track(mp3_path) -> dict with exactly these keys.
