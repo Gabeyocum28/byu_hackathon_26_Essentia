@@ -19,6 +19,8 @@ struct GalaxySelection: Identifiable {
 struct GalaxyMapView: View {
     let map: VizMap
     let selectedTrackID: String?
+    let walk: VizWalk?
+    let walkProgress: CGFloat
     let onSelect: (GalaxySelection) -> Void
 
     @State private var zoom: CGFloat = 1
@@ -113,10 +115,48 @@ struct GalaxyMapView: View {
             }
         }
 
+        drawWalk(in: context, walk: walk, progress: walkProgress,
+                 transform: transform)
+
         if transform.isVisible(seedPoint, in: size, margin: 16) {
             for (radius, opacity) in [(CGFloat(14), 0.15), (9, 0.35), (5.5, 1.0)] {
                 context.fill(dot(at: seedPoint, radius: radius),
                              with: .color(.yellow.opacity(opacity)))
+            }
+        }
+    }
+
+    private func drawWalk(in context: GraphicsContext, walk: VizWalk?,
+                          progress: CGFloat, transform: PointTransform) {
+        guard let walk, walk.path.count >= 2,
+              let first = walk.path.first, let last = walk.path.last else { return }
+
+        let start = transform.place(x: first.x, y: first.y)
+        let end = transform.place(x: last.x, y: last.y)
+        var chord = Path()
+        chord.move(to: start)
+        chord.addLine(to: end)
+        context.stroke(
+            chord, with: .color(.white.opacity(0.35)),
+            style: StrokeStyle(lineWidth: 1, dash: [5, 4])
+        )
+
+        let segmentProgress = min(max(progress, 0), 1) * CGFloat(walk.path.count - 1)
+        for index in 0..<(walk.path.count - 1) {
+            let amount = min(max(segmentProgress - CGFloat(index), 0), 1)
+            guard amount > 0 else { continue }
+            let a = transform.place(x: walk.path[index].x, y: walk.path[index].y)
+            let b = transform.place(x: walk.path[index + 1].x,
+                                    y: walk.path[index + 1].y)
+            let partial = CGPoint(x: a.x + (b.x - a.x) * amount,
+                                  y: a.y + (b.y - a.y) * amount)
+            var edge = Path()
+            edge.move(to: a)
+            edge.addLine(to: partial)
+            context.stroke(edge, with: .color(.yellow), lineWidth: 2.5)
+            context.fill(dot(at: a, radius: 4), with: .color(.yellow))
+            if amount == 1 {
+                context.fill(dot(at: b, radius: 4), with: .color(.yellow))
             }
         }
     }

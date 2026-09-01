@@ -84,4 +84,24 @@ struct InsightsInteractionTests {
             x: [-1, 0, 1], y: [0, 0, 0], maximumDistance: 12
         ) == nil)
     }
+
+    @Test func walkSelectionUsesTwoDistinctGalaxyStarsAsEndpoints() throws {
+        let model = InsightsModel(
+            seed: seed,
+            axis: Axis(id: "sounds_like", label: "Sounds like this")
+        )
+        let first = GalaxySelection(track: seed, x: 0, y: 0)
+        let secondTrack = Track(
+            trackID: "destination", title: "Destination", artist: "Artist",
+            album: "Album", artworkURL: nil, previewURL: nil, score: nil
+        )
+        let second = GalaxySelection(track: secondTrack, x: 1, y: 1)
+
+        #expect(model.selectWalkPoint(first) == nil)
+        #expect(model.walkStart?.id == "seed")
+        let endpoints = try #require(model.selectWalkPoint(second))
+        #expect(endpoints.from == "seed")
+        #expect(endpoints.to == "destination")
+        #expect(model.walkStart == nil)
+    }
 }

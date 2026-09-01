@@ -9,16 +9,46 @@
 
 import SwiftUI
 
+enum InsightMode: String, CaseIterable, Identifiable {
+    case galaxy = "Galaxy"
+    case sound = "Sound"
+    case proof = "Proof"
+
+    var id: String { rawValue }
+}
+
+enum GalaxyMode: String, CaseIterable, Identifiable {
+    case explore = "Explore"
+    case walk = "Walk"
+
+    var id: String { rawValue }
+}
+
+struct WalkEndpoints: Equatable {
+    let from: String
+    let to: String
+}
+
 @MainActor
 @Observable
 final class InsightsModel {
     let seed: Track
     let axis: Axis
     var map: VizMap?
+    var proofMap: VizMap?
     var selected: VizMap.Rec?
     var focusedPoint: GalaxySelection?
+    var mode: InsightMode = .galaxy
+    var galaxyMode: GalaxyMode = .explore
+    var walkStart: GalaxySelection?
+    var walk: VizWalk?
+    var walkProgress: CGFloat = 0
+    var histogram: VizHistogram?
+    var hubs: VizHubs?
+    var correctionEnabled = true
     var isLoading = true
     var errorMessage: String?
+    var proofError: String?
 
     private let api: APIClient
 
@@ -38,6 +68,11 @@ final class InsightsModel {
             if let rec = map.recs.first {
                 focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
             }
+            histogram = try? await api.vizHistogram(trackID: seed.trackID)
+            hubs = try? await api.vizHubs()
+            proofMap = try? await api.vizMap(
+                trackID: seed.trackID, axis: "surprise", correction: true
+            )
         } catch {
             errorMessage = "The math needs an analyzed corpus — is the server up?"
         }
@@ -53,8 +88,84 @@ final class InsightsModel {
 
     func focus(_ point: GalaxySelection) {
         focusedPoint = point
-        if let rec = map?.recs.first(where: { $0.trackID == point.id }) {
+        let source = mode == .proof ? proofMap : map
+        if let rec = source?.recs.first(where: { $0.trackID == point.id }) {
             selected = rec
+        }
+    }
+
+    func focus(_ track: Track) {
+        guard let map = displayMap,
+              let index = map.points.ids.firstIndex(of: track.trackID) else { return }
+        focus(GalaxySelection(track: track, x: map.points.x[index],
+                              y: map.points.y[index]))
+    }
+
+    var displayMap: VizMap? {
+        mode == .proof ? (proofMap ?? map) : map
+    }
+
+    func activate(_ mode: InsightMode) {
+        self.mode = mode
+        let source = displayMap
+        if let rec = source?.recs.first {
+            selected = rec
+            focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
+        }
+    }
+
+    func setGalaxyMode(_ mode: GalaxyMode) {
+        galaxyMode = mode
+        walkStart = nil
+        if mode == .explore {
+            walk = nil
+            walkProgress = 0
+        }
+    }
+
+    /// First tap arms the walk; the second distinct tap yields the request.
+    func selectWalkPoint(_ point: GalaxySelection) -> WalkEndpoints? {
+        if walkStart?.id == point.id { return nil }
+        guard let start = walkStart else {
+            walkStart = point
+            return nil
+        }
+        walkStart = nil
+        return WalkEndpoints(from: start.id, to: point.id)
+    }
+
+    func selectGalaxyPoint(_ point: GalaxySelection) async {
+        focus(point)
+        guard galaxyMode == .walk,
+              let endpoints = selectWalkPoint(point) else { return }
+        do {
+            walk = try await api.vizWalk(from: endpoints.from, to: endpoints.to)
+            walkProgress = 0
+            withAnimation(.easeInOut(duration: max(0.8, Double(walk?.path.count ?? 1) * 0.22))) {
+                walkProgress = 1
+            }
+        } catch {
+            proofError = "No connected walk for that pair. Try two closer stars."
+        }
+    }
+
+    func setCorrection(_ enabled: Bool) async {
+        correctionEnabled = enabled
+        do {
+            let updated = try await api.vizMap(
+                trackID: seed.trackID, axis: "surprise", correction: enabled
+            )
+            withAnimation(.spring(duration: 0.45)) {
+                proofMap = updated
+                selected = updated.recs.first
+                if let rec = updated.recs.first {
+                    focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
+                }
+            }
+            proofError = nil
+        } catch {
+            correctionEnabled.toggle()
+            proofError = "The correction comparison could not be loaded."
         }
     }
 }
@@ -87,33 +198,92 @@ struct InsightsView: View {
     private func loaded(_ map: VizMap) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("\(map.points.ids.count) tracks in 1280-dimensional "
-                         + "sound space, flattened to 2D (PCA)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    GalaxyMapView(
-                        map: map,
-                        selectedTrackID: model.focusedPoint?.id,
-                        onSelect: model.focus
-                    )
-                        .aspectRatio(1, contentMode: .fit)
-                        .background(.black, in: .rect(cornerRadius: 12))
+                Picker("Insight mode", selection: $model.mode) {
+                    ForEach(InsightMode.allCases) { mode in
+                        Text(mode.rawValue.uppercased()).tag(mode)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: model.mode) { _, mode in model.activate(mode) }
+
+                switch model.mode {
+                case .galaxy:
+                    galaxyMode(map)
+                case .sound:
+                    soundMode(map)
+                case .proof:
+                    proofMode(model.proofMap ?? map)
                 }
 
-                if let point = model.focusedPoint {
-                    galaxyCallout(point)
-                }
-
-                recPicker(map)
-
-                SpectrogramView(track: spotlightTrack(map))
-
-                if let rec = model.selected {
-                    MathPanel(seed: map.seed, rec: rec, axis: map.axis)
-                }
+                recPicker(model.displayMap ?? map)
             }
             .padding()
+        }
+    }
+
+    private func galaxyMode(_ map: VizMap) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Picker("Galaxy interaction", selection: $model.galaxyMode) {
+                ForEach(GalaxyMode.allCases) { mode in Text(mode.rawValue).tag(mode) }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: model.galaxyMode) { _, mode in model.setGalaxyMode(mode) }
+
+            Text(model.galaxyMode == .walk
+                 ? (model.walkStart == nil ? "Tap a start star" : "Tap a destination star")
+                 : "\(map.points.ids.count) tracks · pinch, pan, tap any star")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            GalaxyMapView(
+                map: map,
+                selectedTrackID: model.focusedPoint?.id,
+                walk: model.walk,
+                walkProgress: model.walkProgress,
+                onSelect: { point in Task { await model.selectGalaxyPoint(point) } }
+            )
+            .aspectRatio(1, contentMode: .fit)
+            .background(.black, in: .rect(cornerRadius: 12))
+
+            if let point = model.focusedPoint { galaxyCallout(point) }
+            if let walk = model.walk {
+                WalkStrip(walk: walk) { step in
+                    let point = GalaxySelection(track: step.track, x: step.x, y: step.y)
+                    model.focus(point)
+                    playback.toggle(step.track)
+                }
+            }
+        }
+    }
+
+    private func soundMode(_ map: VizMap) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            SpectrogramView(track: spotlightTrack(map))
+            if let rec = model.selected {
+                MathPanel(seed: map.seed, rec: rec, axis: map.axis)
+            }
+        }
+    }
+
+    private func proofMode(_ map: VizMap) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ProofModeView(
+                map: map,
+                histogram: model.histogram,
+                hubs: model.hubs,
+                correctionEnabled: model.correctionEnabled,
+                errorMessage: model.proofError,
+                onCorrectionChanged: { enabled in
+                    Task { await model.setCorrection(enabled) }
+                },
+                onPlay: { track in
+                    model.focus(track)
+                    playback.toggle(track)
+                }
+            )
+            if let rec = model.selected {
+                MathPanel(seed: map.seed, rec: rec, axis: map.axis)
+            }
         }
     }
 
