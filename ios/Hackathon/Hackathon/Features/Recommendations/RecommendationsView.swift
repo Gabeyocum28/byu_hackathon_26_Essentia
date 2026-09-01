@@ -63,6 +63,13 @@ struct RecommendationsView: View {
         }
         .navigationTitle(model.axis.label)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            NavigationLink {
+                InsightsView(seed: model.seed, axis: model.axis)
+            } label: {
+                Label("See the math", systemImage: "sparkles")
+            }
+        }
         .task { await model.load() }
     }
 }

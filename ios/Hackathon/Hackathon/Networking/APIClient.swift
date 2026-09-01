@@ -65,6 +65,16 @@ actor APIClient {
         ], as: RecommendResponse.self).results
     }
 
+    /// GET /viz/map?track_id=...&axis=...&limit=... — demo/debug endpoint
+    /// behind the Insights screen, NOT part of contract/contract.md.
+    func vizMap(trackID: String, axis: String, limit: Int = 10) async throws -> VizMap {
+        try await get("viz/map", query: [
+            URLQueryItem(name: "track_id", value: trackID),
+            URLQueryItem(name: "axis", value: axis),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ], as: VizMap.self)
+    }
+
     // MARK: - Transport
 
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [], as type: T.Type) async throws -> T {
