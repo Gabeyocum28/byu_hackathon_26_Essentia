@@ -126,13 +126,24 @@ actor APIClient {
         for (field, value) in AppConfig.extraHeaders {
             request.setValue(value, forHTTPHeaderField: field)
         }
-        let (data, response) = try await session.data(for: request)
-        guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
-        guard (200..<300).contains(http.statusCode) else { throw APIError.status(http.statusCode) }
         do {
-            return try decoder.decode(T.self, from: data)
+            let (data, response) = try await session.data(for: request)
+            guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
+            guard (200..<300).contains(http.statusCode) else {
+                print("[API] \(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "<invalid url>") -> \(http.statusCode)")
+                throw APIError.status(http.statusCode)
+            }
+            do {
+                return try decoder.decode(T.self, from: data)
+            } catch {
+                print("[API] decode failed for \(request.url?.absoluteString ?? "<invalid url>"): \(error)")
+                throw APIError.decoding(error)
+            }
         } catch {
-            throw APIError.decoding(error)
+            if !(error is APIError) {
+                print("[API] request failed for \(request.httpMethod ?? "GET") \(request.url?.absoluteString ?? "<invalid url>"): \(error)")
+            }
+            throw error
         }
     }
 

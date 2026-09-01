@@ -10,10 +10,13 @@
 import Foundation
 
 enum AppConfig {
-    /// Live Essencia server (Gabe's Mac via Cloudflare tunnel). The URL changes
-    /// The permanent server: the "hackathon" container on the Oracle VM.
-    /// Plain HTTP — the Info.plist ATS exception for this host allows it.
-    nonisolated static let baseURL = URL(string: "http://163.192.48.114:8000")!
+    /// Default to the deployed FastAPI server. Override with `ESSENTIA_BASE_URL`
+    /// when you want to point the simulator at a different host.
+    nonisolated static let baseURL: URL = {
+        let env = ProcessInfo.processInfo.environment["ESSENTIA_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let raw = (env?.isEmpty == false ? env : nil) ?? "http://163.192.48.114:8000"
+        return URL(string: raw)!
+    }()
 
     /// Extra headers applied to every request. (ngrok needed a skip-warning
     /// header; Cloudflare doesn't — kept as a hook for whatever tunnel is used.)
