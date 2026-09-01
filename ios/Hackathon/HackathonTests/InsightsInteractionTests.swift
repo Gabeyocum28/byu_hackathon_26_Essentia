@@ -50,6 +50,36 @@ struct InsightsInteractionTests {
         #expect(model.proofMap?.recs.first?.trackID == "surprise")
     }
 
+    /// The seed needs to be selectable: comparing a recommendation against
+    /// it means pulling up its own spectrogram. It carries no score, so the
+    /// math and attribution panels stand down while it is the selection.
+    @Test func seedIsSelectableAndSurvivesAModeSwitch() {
+        let model = InsightsModel(
+            seed: seed,
+            axis: Axis(id: "sounds_like", label: "Sounds like this")
+        )
+        model.map = Self.map(recTrackID: "chosen", axisID: "sounds_like")
+        model.selected = model.map?.recs.first
+        var played: Track?
+
+        model.selectSeedAndPlay { played = $0 }
+
+        #expect(model.seedSelected)
+        #expect(model.selected == nil)              // no score panel for the seed
+        #expect(played?.trackID == "seed")
+        #expect(model.focusedPoint?.id == "seed")
+
+        // Switching tabs must not quietly hand the screen back to a rec.
+        model.activate(.sound)
+        #expect(model.seedSelected)
+        #expect(model.selected == nil)
+
+        // Picking a rec again releases it.
+        model.selectAndPlay(rec) { _ in }
+        #expect(!model.seedSelected)
+        #expect(model.selected?.trackID == "rec")
+    }
+
     private static func map(recTrackID: String, axisID: String) -> VizMap {
         let rec = VizMap.Rec(
             trackID: recTrackID, title: recTrackID, artist: "Artist",

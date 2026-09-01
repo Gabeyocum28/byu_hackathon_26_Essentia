@@ -62,6 +62,8 @@ final class InsightsModel {
     var histogram: VizHistogram?
     var hubs: VizHubs?
     var correctionEnabled = true
+    /// True while the seed itself is the selection (no rec chosen).
+    var seedSelected = false
     var isLoading = true
     var errorMessage: String?
     var proofError: String?
@@ -193,14 +195,30 @@ final class InsightsModel {
 
     /// One intent keeps the visual selection and audible selection together.
     func selectAndPlay(_ rec: VizMap.Rec, play: (Track) -> Void) {
+        seedSelected = false
         selected = rec
         focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
         play(rec.track)
     }
 
+    /// The seed is a track like any other on this screen — you need its own
+    /// spectrogram to compare a recommendation against. It has no score of
+    /// its own, so the math and attribution panels stand down while it is
+    /// the selection.
+    func selectSeedAndPlay(play: (Track) -> Void) {
+        seedSelected = true
+        selected = nil
+        let track = map?.seed.track ?? seed
+        if let point = map?.seed {
+            focusedPoint = GalaxySelection(track: track, x: point.x, y: point.y)
+        }
+        play(track)
+    }
+
     func focus(_ point: GalaxySelection) {
         focusedPoint = point
         if let rec = displayMap?.recs.first(where: { $0.trackID == point.id }) {
+            seedSelected = false
             selected = rec
         }
     }
@@ -223,6 +241,7 @@ final class InsightsModel {
 
     func activate(_ mode: InsightMode) {
         self.mode = mode
+        guard !seedSelected else { return }
         let source = displayMap
         if let rec = source?.recs.first {
             selected = rec
@@ -496,6 +515,8 @@ struct InsightsView: View {
     private func recPicker(_ map: VizMap) -> some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
+                seedChip(map)
+                Divider().frame(height: 52)
                 ForEach(map.recs) { rec in
                     Button {
                         model.selectAndPlay(rec) { playback.toggle($0) }
@@ -519,6 +540,31 @@ struct InsightsView: View {
                 }
             }
         }
+    }
+
+    /// The seed leads the strip, ringed in the same yellow it wears on the
+    /// galaxy, so "which of these am I looking at?" has one answer.
+    private func seedChip(_ map: VizMap) -> some View {
+        Button {
+            model.selectSeedAndPlay { playback.toggle($0) }
+        } label: {
+            VStack(spacing: 4) {
+                Artwork(url: map.seed.artworkURL)
+                    .frame(width: 52, height: 52)
+                    .overlay {
+                        if model.seedSelected {
+                            RoundedRectangle(cornerRadius: 8)
+                                .stroke(Color.yellow, lineWidth: 3)
+                        }
+                    }
+                Text("Seed")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.yellow)
+                    .frame(width: 60)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Play the seed, \(map.seed.title) by \(map.seed.artist)")
     }
 
     private func galaxyCallout(_ point: GalaxySelection) -> some View {
