@@ -211,3 +211,53 @@ def test_root_lists_routes(client):
     body = client.get("/").json()
     assert "/axes" in str(body)
     assert "/recommend" in str(body)
+
+
+# ---- /recommend corpus matrix cache ----
+
+def test_a_track_analyzed_after_the_first_request_still_appears(client, seeded_corpus):
+    """The crawler writes continuously; a cached matrix must not freeze the corpus."""
+    seed = seeded_corpus[0]["track_id"]
+    first = client.get("/recommend", params={"track_id": seed, "axis": "sounds_like",
+                                             "limit": 10}).json()["results"]
+    assert len(first) == 4
+
+    late = FIXTURE[5]
+    store.put_track(late, fake_features(0.5))
+
+    second = client.get("/recommend", params={"track_id": seed, "axis": "sounds_like",
+                                              "limit": 10}).json()["results"]
+    assert late["track_id"] in {t["track_id"] for t in second}
+    assert len(second) == 5
+
+
+def test_repeat_requests_do_not_re_read_the_whole_corpus(client, seeded_corpus, monkeypatch):
+    """Re-parsing every feature blob per request is what made /recommend 25s."""
+    reads = []
+    real = store.get_many_features
+    monkeypatch.setattr(store, "get_many_features",
+                        lambda ids: reads.append(list(ids)) or real(ids))
+
+    seed = seeded_corpus[0]["track_id"]
+    params = {"track_id": seed, "axis": "sounds_like", "limit": 10}
+    client.get("/recommend", params=params)
+    assert len(reads[0]) == 5, "the first request builds the whole matrix"
+
+    reads.clear()
+    client.get("/recommend", params=params)
+    assert reads == [], "an unchanged corpus should be read zero times"
+
+    store.put_track(FIXTURE[5], fake_features(0.5))
+    reads.clear()
+    client.get("/recommend", params=params)
+    assert reads == [[FIXTURE[5]["track_id"]]], "only the new track is parsed"
+
+
+def test_seed_is_never_recommended_to_itself(client, seeded_corpus):
+    """The seed is a row in the shared matrix now, so it must be filtered out."""
+    for axis in ("sounds_like", "groove", "surprise"):
+        seed = seeded_corpus[2]["track_id"]
+        results = client.get("/recommend", params={"track_id": seed, "axis": axis,
+                                                   "limit": 10}).json()["results"]
+        assert seed not in {t["track_id"] for t in results}
+        assert len(results) == 4
