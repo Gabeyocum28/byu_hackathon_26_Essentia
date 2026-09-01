@@ -53,9 +53,32 @@ def get_features(track_id: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
+def corpus_size() -> int:
+    """How many tracks are analyzed, without transferring their ids.
+
+    corpus_ids() ships every id and sorts them; at corpus scale that is real
+    time on a path that runs per request. Tracks are only ever added, so the
+    count alone is a sound signal for "has anything changed".
+    """
+    return client().scard("corpus:ids")
+
+
+# corpus_ids ships every id out of Redis and sorts them. On a 90k corpus that
+# is ~1 MB of strings and a full sort, paid on every /recommend. Tracks are only
+# ever ADDED, so the cardinality is a sound "has anything changed" signal, and
+# SCARD is O(1) -- check that first and reuse the last list when it matches.
+_ids_cache: tuple[int, list[str]] | None = None
+
+
 def corpus_ids() -> list[str]:
-    """All track ids currently analyzed and stored."""
-    return sorted(client().smembers("corpus:ids"))
+    """All track ids currently analyzed and stored, sorted."""
+    global _ids_cache
+    size = client().scard("corpus:ids")
+    if _ids_cache is not None and _ids_cache[0] == size:
+        return _ids_cache[1]
+    ids = sorted(client().smembers("corpus:ids"))
+    _ids_cache = (size, ids)
+    return ids
 
 
 def get_many_features(track_ids: list[str]) -> list[dict | None]:

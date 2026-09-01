@@ -243,6 +243,29 @@ def _build(corpus: tuple[str, ...], feature_key: str, metric: str,
     return cached.ids, cached.matrix, (cached.correction if want_correction else None)
 
 
+# Normalizing the corpus is the dominant per-request cost on a cosine axis:
+# rank.scores() re-divides the whole matrix every call, ~900 MB of allocation
+# at 90k tracks. The unit rows only change when rows are appended, and
+# _corpus_matrix hands back a NEW ndarray when that happens, so keying on the
+# matrix object itself invalidates this cache for free.
+_UNIT_CACHE: dict[str, tuple[int, np.ndarray]] = {}
+
+
+def _similarity(feature_key: str, matrix: np.ndarray, seed_vec: np.ndarray,
+                metric: str) -> np.ndarray:
+    """Seed against every row, reusing a cached unit matrix where cosine allows."""
+    from music_recommendations.server import rank as rank_mod
+
+    if metric != "cosine" or not len(matrix):
+        return rank_mod.scores(seed_vec, matrix, metric)
+
+    stamp, unit = _UNIT_CACHE.get(feature_key, (None, None))
+    if stamp != id(matrix):
+        unit = rank_mod.normalize(np.asarray(matrix, dtype=float))
+        _UNIT_CACHE[feature_key] = (id(matrix), unit)
+    return unit @ rank_mod.normalize(np.asarray(seed_vec, dtype=float))
+
+
 def _percentile(values: np.ndarray) -> np.ndarray:
     """Each score as "better than X% of the corpus", 0-100.
 
@@ -323,11 +346,11 @@ def recommend(track_id: str, axis: str,
 
         # The seed is a row in the cached matrix like any other, so ask for one
         # extra and drop it — cheaper than rebuilding the matrix per seed.
+        similarity = _similarity(feature_key, matrix, seed_vec, metric)
         order = rank_mod.rank(
             seed_vec, matrix, direction=direction, limit=limit + 1,
-            metric=metric, correction=correction,
+            metric=metric, correction=correction, similarity=similarity,
         )
-        similarity = rank_mod.scores(seed_vec, matrix, metric)
         results = []
         for idx in order:
             if ids[idx] == track_id:
@@ -427,10 +450,10 @@ def viz_map(track_id: str, axis: str,
         ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
                                                  want_correction=use_correction)
         seed_vec = _vector(seed_features, feature_key)
+        similarity = _similarity(feature_key, matrix, seed_vec, metric)
         order = rank_mod.rank(seed_vec, matrix, direction=direction,
                               limit=limit + 1, metric=metric,
-                              correction=correction)
-        similarity = rank_mod.scores(seed_vec, matrix, metric)
+                              correction=correction, similarity=similarity)
 
     recs = []
     for idx in order:
