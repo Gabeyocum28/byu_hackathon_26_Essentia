@@ -38,4 +38,17 @@ struct InsightsInteractionTests {
         #expect(model.selected?.trackID == "rec")
         #expect(requestedTrack?.trackID == "rec")
     }
+
+    @Test func seekingClampsProgressToPreviewBounds() {
+        let playback = PlaybackController()
+
+        playback.seek(progress: -0.4)
+        #expect(playback.progress == 0)
+
+        playback.seek(progress: 0.37)
+        #expect(playback.progress == 0.37)
+
+        playback.seek(progress: 1.4)
+        #expect(playback.progress == 1)
+    }
 }

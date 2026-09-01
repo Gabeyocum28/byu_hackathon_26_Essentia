@@ -81,6 +81,17 @@ final class PlaybackController {
         progress = 0
     }
 
+    /// Seeks within the 30-second preview using a normalized 0...1 position.
+    /// Progress moves immediately so drag gestures never wait for AVPlayer's
+    /// periodic observer before updating the playhead.
+    func seek(progress requestedProgress: Double) {
+        let clamped = min(max(requestedProgress, 0), 1)
+        progress = clamped
+        guard duration > 0 else { return }
+        let time = CMTime(seconds: duration * clamped, preferredTimescale: 600)
+        player?.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
     // MARK: - Loading
 
     private func load(_ track: Track) async {

@@ -131,6 +131,7 @@ final class SpectrogramLoader {
 struct SpectrogramView: View {
     let track: Track
     @State private var loader = SpectrogramLoader()
+    @State private var draggedProgress: Double?
     @Environment(PlaybackController.self) private var playback
 
     var body: some View {
@@ -143,15 +144,32 @@ struct SpectrogramView: View {
                 RoundedRectangle(cornerRadius: 8).fill(.black)
                 if let image = loader.image {
                     GeometryReader { proxy in
-                        Image(decorative: image, scale: 1)
-                            .resizable()
-                            .interpolation(.medium)
-                        if playback.nowPlayingID == track.trackID {
-                            Rectangle()
-                                .fill(.white.opacity(0.9))
-                                .frame(width: 1.5)
-                                .offset(x: proxy.size.width * playback.progress)
+                        ZStack(alignment: .leading) {
+                            Image(decorative: image, scale: 1)
+                                .resizable()
+                                .interpolation(.medium)
+                            if playback.nowPlayingID == track.trackID {
+                                Rectangle()
+                                    .fill(.white.opacity(0.9))
+                                    .frame(width: 1.5)
+                                    .offset(x: proxy.size.width * (draggedProgress ?? playback.progress))
+                            }
                         }
+                        .contentShape(Rectangle())
+                        .gesture(
+                            DragGesture(minimumDistance: 0)
+                                .onChanged { value in
+                                    let progress = value.location.x / max(proxy.size.width, 1)
+                                    let clamped = min(max(progress, 0), 1)
+                                    draggedProgress = clamped
+                                    playback.seek(progress: clamped)
+                                }
+                                .onEnded { value in
+                                    let progress = value.location.x / max(proxy.size.width, 1)
+                                    playback.seek(progress: min(max(progress, 0), 1))
+                                    draggedProgress = nil
+                                }
+                        )
                     }
                     .clipShape(.rect(cornerRadius: 8))
                 } else if loader.isLoading {
