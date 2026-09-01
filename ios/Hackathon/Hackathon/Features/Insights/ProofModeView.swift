@@ -1,52 +1,181 @@
+//
+//  ProofModeView.swift
+//  Hackathon
+//
+//  "Is 0.83 actually good?" — the seed against the whole corpus, the same
+//  chart under random noise for comparison, and the hubness correction that
+//  stops a handful of tracks being everyone's answer.
+//
+//  Every section carries a "?" explanation: these are real statistics, and
+//  the surprise-axis comparison in particular shows songs that deliberately
+//  do NOT resemble the seed, which reads as a bug unless it is explained.
+//
+
 import SwiftUI
 
 struct ProofModeView: View {
-    let map: VizMap
+    let seedTitle: String
     let histogram: VizHistogram?
     let hubs: VizHubs?
+    /// The surprise-axis picks, shown only inside the correction section.
+    let surpriseRecs: [VizMap.Rec]
     let correctionEnabled: Bool
     let errorMessage: String?
     let onCorrectionChanged: (Bool) -> Void
     let onPlay: (Track) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
+            histogramSection
+            correctionSection
+            if let hubs { hubSection(hubs) }
+        }
+    }
+
+    // MARK: - How special is this neighbourhood?
+
+    private var histogramSection: some View {
+        ExplainedSection(
+            title: "How special is this match?",
+            explanation: """
+            Each bar counts how many tracks in the corpus sit at that \
+            similarity to \u{201C}\(seedTitle)\u{201D}. Your recommendations are the \
+            yellow marks out on the right tail.
+
+            The white curve is the same chart if music were random noise: in \
+            1280 dimensions two random directions are almost always nearly \
+            perpendicular, with a spread of 1/\u{221A}1280 \u{2248} 0.028. Real music \
+            sits far to the right of that curve — the gap is the structure \
+            the model learned.
+            """
+        ) {
             if let histogram {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("How special is this neighborhood?")
-                        .font(.headline)
                     HistogramPlot(histogram: histogram)
                         .frame(height: 180)
                     Text("Top recommendations are closer than \(histogram.percentile, specifier: "%.1f")% of the corpus")
                         .font(.subheadline.weight(.semibold))
-                    Text("random σ = \(histogram.null.sd, specifier: "%.4f") · corpus μ = \(histogram.corpus.mean, specifier: "%.3f")")
+                    Text("random \u{03C3} = \(histogram.null.sd, specifier: "%.4f") \u{00B7} corpus \u{03BC} = \(histogram.corpus.mean, specifier: "%.3f")")
                         .font(.system(.caption, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
             } else {
-                ProgressView("Measuring the corpus …")
+                ProgressView("Measuring the corpus \u{2026}")
             }
+        }
+    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                Toggle("Surprise correction", isOn: Binding(
+    // MARK: - Hubness correction
+
+    private var correctionSection: some View {
+        ExplainedSection(
+            title: "Surprise correction",
+            explanation: """
+            This section is a separate experiment on the \u{201C}surprise\u{201D} axis, \
+            which hunts for tracks UNLIKE your seed — so the songs below are \
+            not supposed to resemble it. That is what makes them a good test.
+
+            In high dimensions a few tracks drift close to everything (hubs) \
+            and would win every query. The correction subtracts each track's \
+            average similarity to the whole corpus. Turn it off and watch the \
+            same handful of hub tracks take over the list.
+            """
+        ) {
+            VStack(alignment: .leading, spacing: 10) {
+                Toggle("Correction \(correctionEnabled ? "on" : "off")", isOn: Binding(
                     get: { correctionEnabled },
                     set: onCorrectionChanged
                 ))
-                .font(.headline)
+                .font(.subheadline.weight(.medium))
+
                 Text(correctionEnabled
-                     ? "subtracting each track’s mean corpus similarity"
-                     : "raw distance can over-reward global outliers")
+                     ? "Subtracting each track\u{2019}s mean similarity to the corpus."
+                     : "Raw distance — hub tracks can win every seed.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if !surpriseRecs.isEmpty {
+                    Text("Surprise picks \u{2014} unlike your seed on purpose")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(surpriseRecs) { rec in
+                                Button { onPlay(rec.track) } label: {
+                                    VStack(spacing: 4) {
+                                        Artwork(url: rec.artworkURL)
+                                            .frame(width: 52, height: 52)
+                                        Text(rec.title)
+                                            .font(.caption2)
+                                            .lineLimit(1)
+                                            .frame(width: 56)
+                                    }
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                        .padding(.vertical, 2)
+                    }
+                }
+
                 if let errorMessage {
                     Text(errorMessage).font(.caption).foregroundStyle(.red)
                 }
             }
             .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.45), in: .rect(cornerRadius: 12))
+        }
+    }
 
-            if let hubs {
-                HubHallView(hubs: hubs, onPlay: onPlay)
+    // MARK: - Hub hall of fame
+
+    private func hubSection(_ hubs: VizHubs) -> some View {
+        ExplainedSection(
+            title: "Hub hall of fame",
+            explanation: """
+            \u{201C}Most frequent neighbours\u{201D} counts how many other tracks list \
+            each one among their 8 nearest. If the corpus were evenly spread \
+            every track would appear about 8 times; the top hub appears in \
+            far more, which is the curse of dimensionality showing up as a \
+            recommendation bug.
+
+            Most central and most isolated are the tracks with the highest \
+            and lowest average similarity to everything else.
+            """
+        ) {
+            VStack(alignment: .leading, spacing: 14) {
+                hubRow("Most frequent neighbours",
+                       entries: hubs.hubs.map { ($0.track, "\($0.count) lists") })
+                hubRow("Most central",
+                       entries: hubs.central.map { ($0.track, String(format: "\u{03BC} %.3f", $0.centrality)) })
+                hubRow("Most isolated",
+                       entries: hubs.isolated.map { ($0.track, String(format: "\u{03BC} %.3f", $0.centrality)) })
+            }
+        }
+    }
+
+    private func hubRow(_ title: String, entries: [(Track, String)]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    ForEach(entries, id: \.0.id) { track, value in
+                        Button { onPlay(track) } label: {
+                            VStack(alignment: .leading, spacing: 4) {
+                                Artwork(url: track.artworkURL).frame(width: 64, height: 64)
+                                Text(track.title)
+                                    .font(.caption2).lineLimit(1)
+                                    .frame(width: 68, alignment: .leading)
+                                Text(value)
+                                    .font(.system(.caption2, design: .monospaced))
+                                    .foregroundStyle(.yellow)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.vertical, 2)
             }
         }
     }
@@ -99,47 +228,5 @@ private struct HistogramPlot: View {
         .padding(8)
         .background(.black, in: .rect(cornerRadius: 10))
         .accessibilityLabel("Similarity histogram with random-noise overlay")
-    }
-}
-
-private struct HubHallView: View {
-    let hubs: VizHubs
-    let onPlay: (Track) -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text("Hub hall of fame").font(.headline)
-            hubRow("Most frequent neighbors", entries: hubs.hubs.map {
-                ($0.track, "\($0.count) lists")
-            })
-            hubRow("Most central", entries: hubs.central.map {
-                ($0.track, String(format: "μ %.3f", $0.centrality))
-            })
-            hubRow("Most isolated", entries: hubs.isolated.map {
-                ($0.track, String(format: "μ %.3f", $0.centrality))
-            })
-        }
-    }
-
-    private func hubRow(_ title: String, entries: [(Track, String)]) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 10) {
-                    ForEach(entries, id: \.0.id) { track, value in
-                        Button { onPlay(track) } label: {
-                            VStack(alignment: .leading, spacing: 4) {
-                                Artwork(url: track.artworkURL).frame(width: 64, height: 64)
-                                Text(track.title).font(.caption2).lineLimit(1).frame(width: 68, alignment: .leading)
-                                Text(value)
-                                    .font(.system(.caption2, design: .monospaced))
-                                    .foregroundStyle(.yellow)
-                            }
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-            }
-        }
     }
 }

@@ -200,8 +200,7 @@ final class InsightsModel {
 
     func focus(_ point: GalaxySelection) {
         focusedPoint = point
-        let source = mode == .proof ? proofMap : map
-        if let rec = source?.recs.first(where: { $0.trackID == point.id }) {
+        if let rec = displayMap?.recs.first(where: { $0.trackID == point.id }) {
             selected = rec
         }
     }
@@ -214,12 +213,12 @@ final class InsightsModel {
     }
 
     var displayMap: VizMap? {
-        // Only Proof mode follows proofMap. It is a second map on the
-        // surprise axis, loaded so the hubness toggle has something to
-        // compare, and letting it lead everywhere replaced the user's own
-        // axis: you picked "sounds like" and the galaxy and rec strip
-        // showed surprise picks instead.
-        mode == .proof ? (proofMap ?? map) : map
+        // Always the axis the user picked. proofMap is a second map on the
+        // surprise axis, loaded only so the hubness toggle has something to
+        // compare; it stays inside that section, where it is labelled as
+        // deliberately unlike the seed. Letting it lead the screen made the
+        // galaxy and rec strip show songs the user never asked for.
+        map
     }
 
     func activate(_ mode: InsightMode) {
@@ -275,12 +274,10 @@ final class InsightsModel {
                 trackID: seed.trackID, axis: "surprise", correction: enabled
             )
             guard requestGeneration == correctionRequestGeneration else { return }
+            // Only the comparison list changes: the galaxy, rec strip and
+            // math panel stay on the axis the user actually chose.
             withAnimation(.spring(duration: 0.45)) {
                 proofMap = updated
-                selected = updated.recs.first
-                if let rec = updated.recs.first {
-                    focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
-                }
             }
             proofError = nil
         } catch {
@@ -363,7 +360,7 @@ struct InsightsView: View {
                 case .sound:
                     soundMode(map)
                 case .proof:
-                    proofMode(model.proofMap ?? map)
+                    proofMode(model.displayMap ?? map)
                 }
 
                 recPicker(model.displayMap ?? map)
@@ -465,9 +462,10 @@ struct InsightsView: View {
     private func proofMode(_ map: VizMap) -> some View {
         VStack(alignment: .leading, spacing: 18) {
             ProofModeView(
-                map: map,
+                seedTitle: map.seed.title,
                 histogram: model.histogram,
                 hubs: model.hubs,
+                surpriseRecs: model.proofMap?.recs ?? [],
                 correctionEnabled: model.correctionEnabled,
                 errorMessage: model.proofError,
                 onCorrectionChanged: { enabled in
