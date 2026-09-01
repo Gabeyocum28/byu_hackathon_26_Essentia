@@ -152,6 +152,16 @@ def test_viz_map_surprise_includes_centrality(client, seeded_corpus):
         assert isinstance(rec["math"]["centrality"], float)
 
 
+def test_viz_map_can_disable_surprise_correction(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    body = client.get(
+        "/viz/map",
+        params={"track_id": tid, "axis": "surprise", "correction": "off"},
+    ).json()
+    assert body["axis"]["correction"] == "off"
+    assert all(rec["math"]["centrality"] is None for rec in body["recs"])
+
+
 def test_viz_map_groove_axis_reports_euclidean(client, seeded_corpus):
     tid = seeded_corpus[0]["track_id"]
     body = client.get(
@@ -162,3 +172,73 @@ def test_viz_map_groove_axis_reports_euclidean(client, seeded_corpus):
         # score = 1/(1+distance) must hold, so the panel can show the distance
         assert rec["math"]["distance"] is not None
         assert rec["score"] == pytest.approx(1.0 / (1.0 + rec["math"]["distance"]))
+
+
+# ---- T1: walk, histogram, and hubs ----
+
+def test_shortest_walk_uses_knn_edges_and_preserves_endpoints():
+    # Points on a quarter circle: the graph walk follows adjacent samples and
+    # is longer than the direct chord through empty ambient space.
+    theta = np.linspace(0, np.pi / 2, 7)
+    matrix = np.column_stack([np.cos(theta), np.sin(theta)])
+
+    path, geodesic, ambient = viz.shortest_walk(matrix, 0, 6, k=2)
+
+    assert path[0] == 0 and path[-1] == 6
+    assert len(path) > 2
+    assert geodesic >= ambient > 0
+
+
+def test_viz_walk_returns_track_path_and_distance_math(client, seeded_corpus):
+    start = seeded_corpus[0]["track_id"]
+    end = seeded_corpus[-1]["track_id"]
+    response = client.get(
+        "/viz/walk", params={"from": start, "to": end, "k": 3}
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["path"][0]["track_id"] == start
+    assert body["path"][-1]["track_id"] == end
+    assert all("x" in step and "y" in step for step in body["path"])
+    assert body["geodesic"] >= body["ambient"] > 0
+    assert body["detour"] == pytest.approx(body["geodesic"] / body["ambient"])
+
+
+def test_viz_walk_rejects_unknown_endpoint(client, seeded_corpus):
+    response = client.get(
+        "/viz/walk",
+        params={"from": seeded_corpus[0]["track_id"], "to": "missing"},
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "track missing not in corpus"
+
+
+def test_viz_histogram_has_sixty_bins_and_analytic_null(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    body = client.get("/viz/histogram", params={"track_id": tid}).json()
+
+    assert len(body["bins"]) == len(body["counts"]) == 60
+    assert sum(body["counts"]) == len(seeded_corpus) - 1
+    assert body["null"]["mean"] == 0
+    assert body["null"]["sd"] == pytest.approx(1 / np.sqrt(1280))
+    assert body["rec_scores"] == sorted(body["rec_scores"], reverse=True)
+    assert 0 <= body["percentile"] <= 100
+
+
+def test_viz_histogram_404_when_track_missing(client, seeded_corpus):
+    response = client.get(
+        "/viz/histogram", params={"track_id": "missing"}
+    )
+    assert response.status_code == 404
+    assert response.json()["detail"] == "track missing not analyzed"
+
+
+def test_viz_hubs_reports_k_occurrence_central_and_isolated(client, seeded_corpus):
+    body = client.get("/viz/hubs", params={"k": 3, "limit": 3}).json()
+
+    assert body["expected_k"] == 3
+    assert sum(row["count"] for row in body["all_counts"]) == len(seeded_corpus) * 3
+    assert len(body["hubs"]) == len(body["central"]) == len(body["isolated"]) == 3
+    assert body["hubs"][0]["count"] >= body["hubs"][-1]["count"]
+    assert body["central"][0]["centrality"] >= body["central"][-1]["centrality"]
+    assert body["isolated"][0]["centrality"] <= body["isolated"][-1]["centrality"]

@@ -48,13 +48,15 @@ class FakeRedis:
 @pytest.fixture(autouse=True)
 def clear_matrix_cache():
     """/recommend caches the corpus matrix in module state; tests must not share it."""
-    from music_recommendations.server import app
+    from music_recommendations.server import app, viz
 
     app._MATRIX_CACHE.clear()
     app._PROJECTION_CACHE.clear()
+    viz.clear_geometry_cache()
     yield
     app._MATRIX_CACHE.clear()
     app._PROJECTION_CACHE.clear()
+    viz.clear_geometry_cache()
 
 
 @pytest.fixture

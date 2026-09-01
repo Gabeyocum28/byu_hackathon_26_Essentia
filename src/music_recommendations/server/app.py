@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query
 from pydantic import BaseModel
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
 from contract.features import AXES
 from music_recommendations.analysis import analyze_track
@@ -303,7 +303,8 @@ def _projection(matrix: np.ndarray) -> np.ndarray:
 
 @app.get("/viz/map")
 def viz_map(track_id: str, axis: str,
-            limit: int = Query(10, ge=1, le=50)) -> dict:
+            limit: int = Query(10, ge=1, le=50),
+            correction: Literal["on", "off"] = "on") -> dict:
     """Everything the wow screen needs in one payload: the whole corpus as 2D
     points, the seed, and the recs with the actual numbers behind each score."""
     if axis not in AXIS_FEATURES:
@@ -326,8 +327,9 @@ def viz_map(track_id: str, axis: str,
     from music_recommendations.server import rank as rank_mod
 
     metric = METRICS.get(feature_key, "cosine")
+    use_correction = direction == -1 and correction == "on"
     ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
-                                             want_correction=direction == -1)
+                                             want_correction=use_correction)
     seed_vec = _vector(seed_features, feature_key)
     order = rank_mod.rank(seed_vec, matrix, direction=direction,
                           limit=limit + 1, metric=metric, correction=correction)
@@ -373,6 +375,9 @@ def viz_map(track_id: str, axis: str,
             "artwork_url": None,
             "preview_url": None,
         })
+    axis_info = {"id": axis, "metric": metric, "direction": direction}
+    if direction == -1:
+        axis_info["correction"] = "on" if use_correction else "off"
 
     return {
         "points": {
@@ -383,7 +388,139 @@ def viz_map(track_id: str, axis: str,
         },
         "seed": seed,
         "recs": recs,
-        "axis": {"id": axis, "metric": metric, "direction": direction},
+        "axis": axis_info,
+    }
+
+
+def _viz_embedding_corpus() -> tuple[list[str], np.ndarray]:
+    corpus = tuple(_safe(store.corpus_ids, default=[]))
+    if not corpus:
+        raise HTTPException(404, "analyzed corpus is empty")
+    ids, matrix, _ = _corpus_matrix(
+        corpus, "embedding", "cosine", want_correction=False
+    )
+    if not ids:
+        raise HTTPException(404, "analyzed corpus is empty")
+    return ids, matrix
+
+
+def _viz_track(track_id: str) -> dict:
+    return _safe(store.get_track, track_id) or {
+        "track_id": track_id,
+        "title": track_id,
+        "artist": "Unknown artist",
+        "album": "",
+        "artwork_url": None,
+        "preview_url": None,
+    }
+
+
+@app.get("/viz/walk")
+def viz_walk(from_: str = Query(alias="from"), to: str = Query(),
+             k: int = Query(8, ge=1, le=50)) -> dict:
+    ids, matrix = _viz_embedding_corpus()
+    position = {track_id: index for index, track_id in enumerate(ids)}
+    for endpoint in (from_, to):
+        if endpoint not in position:
+            raise HTTPException(404, f"track {endpoint} not in corpus")
+
+    try:
+        path, geodesic, ambient = viz.shortest_walk(
+            matrix, position[from_], position[to], k=k
+        )
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    xy = _projection(matrix)
+    steps = [
+        {
+            **_viz_track(ids[index]),
+            "x": float(xy[index, 0]),
+            "y": float(xy[index, 1]),
+        }
+        for index in path
+    ]
+    return {
+        "path": steps,
+        "geodesic": geodesic,
+        "ambient": ambient,
+        "detour": geodesic / ambient if ambient > 0 else 1.0,
+        "k": min(k, len(ids) - 1),
+    }
+
+
+@app.get("/viz/histogram")
+def viz_histogram(track_id: str) -> dict:
+    seed_features = _safe(store.get_features, track_id)
+    if not seed_features or "embedding" not in seed_features:
+        raise HTTPException(404, f"track {track_id} not analyzed")
+    ids, matrix = _viz_embedding_corpus()
+    if track_id not in ids:
+        raise HTTPException(404, f"track {track_id} not analyzed")
+
+    from music_recommendations.server import rank as rank_mod
+
+    similarities = rank_mod.scores(
+        _vector(seed_features, "embedding"), matrix, "cosine"
+    )
+    values = np.delete(similarities, ids.index(track_id))
+    counts, edges = np.histogram(values, bins=60, range=(-1.0, 1.0))
+    centers = (edges[:-1] + edges[1:]) / 2
+    rec_scores = np.sort(values)[::-1][:10]
+    threshold = float(rec_scores[-1]) if len(rec_scores) else 0.0
+    percentile = float(100.0 * np.mean(values <= threshold)) if len(values) else 0.0
+    dimension = int(matrix.shape[1])
+    return {
+        "bins": [float(value) for value in centers],
+        "counts": [int(value) for value in counts],
+        "rec_scores": [float(value) for value in rec_scores],
+        "percentile": percentile,
+        "null": {"mean": 0.0, "sd": float(1.0 / np.sqrt(dimension))},
+        "corpus": {
+            "mean": float(values.mean()) if len(values) else 0.0,
+            "sd": float(values.std()) if len(values) else 0.0,
+        },
+    }
+
+
+@app.get("/viz/hubs")
+def viz_hubs(k: int = Query(8, ge=1, le=50),
+             limit: int = Query(5, ge=1, le=20)) -> dict:
+    ids, matrix = _viz_embedding_corpus()
+    if len(ids) < 2:
+        raise HTTPException(404, "hubness needs at least two tracks")
+    neighbor_k = min(k, len(ids) - 1)
+    similarity = viz.pairwise_cosine(matrix)
+    without_self = similarity.copy()
+    np.fill_diagonal(without_self, -np.inf)
+    neighbors = np.argpartition(
+        -without_self, neighbor_k - 1, axis=1
+    )[:, :neighbor_k]
+    counts = np.bincount(neighbors.ravel(), minlength=len(ids))
+    centrality = (similarity.sum(axis=1) - np.diag(similarity)) / (len(ids) - 1)
+
+    index = np.arange(len(ids))
+    hub_order = np.lexsort((index, -counts))
+    central_order = np.lexsort((index, -centrality))
+    isolated_order = np.lexsort((index, centrality))
+
+    def rows(order: np.ndarray, field: str, values: np.ndarray) -> list[dict]:
+        return [
+            {**_viz_track(ids[i]), field: float(values[i])}
+            for i in order[:limit]
+        ]
+
+    return {
+        "hubs": [
+            {**_viz_track(ids[i]), "count": int(counts[i])}
+            for i in hub_order[:limit]
+        ],
+        "central": rows(central_order, "centrality", centrality),
+        "isolated": rows(isolated_order, "centrality", centrality),
+        "expected_k": neighbor_k,
+        "all_counts": [
+            {"track_id": track_id, "count": int(count)}
+            for track_id, count in zip(ids, counts)
+        ],
     }
 
 
