@@ -20,14 +20,18 @@ import numpy as np
 
 _PAIRWISE_LOCK = threading.RLock()
 _PAIRWISE_CACHE: tuple[np.ndarray, np.ndarray] | None = None
-_GRAPH_CACHE: dict[tuple[int, int], list[dict[int, float]]] = {}
+# (matrix, {k: adjacency}) — the matrix is held in the tuple ON PURPOSE:
+# keying by bare id(matrix) let the old array be garbage-collected after a
+# corpus growth, and a later array reusing the same address would silently
+# serve a graph whose node indices belong to the old, smaller corpus.
+_GRAPH_CACHE: tuple[np.ndarray, dict[int, list[dict[int, float]]]] | None = None
 
 
 def clear_geometry_cache() -> None:
-    global _PAIRWISE_CACHE
+    global _PAIRWISE_CACHE, _GRAPH_CACHE
     with _PAIRWISE_LOCK:
         _PAIRWISE_CACHE = None
-        _GRAPH_CACHE.clear()
+        _GRAPH_CACHE = None
 
 
 def normalized_rows(matrix: np.ndarray) -> np.ndarray:
@@ -69,9 +73,12 @@ def shortest_walk(matrix: np.ndarray, start: int, end: int,
         return [start], 0.0, 0.0
     k = min(max(int(k), 1), n - 1)
 
-    cache_key = (id(matrix), k)
+    global _GRAPH_CACHE
     with _PAIRWISE_LOCK:
-        adjacency = _GRAPH_CACHE.get(cache_key)
+        if _GRAPH_CACHE is None or _GRAPH_CACHE[0] is not matrix:
+            _GRAPH_CACHE = (matrix, {})
+        graphs = _GRAPH_CACHE[1]
+        adjacency = graphs.get(k)
         if adjacency is None:
             similarity = pairwise_cosine(matrix)
             distance = 1.0 - similarity
@@ -84,7 +91,7 @@ def shortest_walk(matrix: np.ndarray, start: int, end: int,
                     weight = float(distance[i, j])
                     adjacency[i][j] = min(adjacency[i].get(j, weight), weight)
                     adjacency[j][i] = min(adjacency[j].get(i, weight), weight)
-            _GRAPH_CACHE[cache_key] = adjacency
+            graphs[k] = adjacency
 
     distances = [float("inf")] * n
     previous = [-1] * n

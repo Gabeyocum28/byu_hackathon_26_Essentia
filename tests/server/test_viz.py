@@ -202,6 +202,21 @@ def test_shortest_walk_uses_knn_edges_and_preserves_endpoints():
     assert ambient == pytest.approx(expected_ambient)
 
 
+def test_shortest_walk_graph_cache_pins_matrix_and_evicts_on_new_matrix():
+    # The graph cache must hold the matrix it was built from: a bare id()
+    # key let a freed matrix's address be reused by a successor, silently
+    # serving stale node indices after the corpus grew mid-session.
+    theta = np.linspace(0, np.pi / 2, 7)
+    first = np.column_stack([np.cos(theta), np.sin(theta)])
+    viz.shortest_walk(first, 0, 6, k=2)
+    assert viz._GRAPH_CACHE is not None and viz._GRAPH_CACHE[0] is first
+
+    second = np.column_stack([np.cos(theta[:5]), np.sin(theta[:5])])
+    path, _, _ = viz.shortest_walk(second, 0, 4, k=2)
+    assert viz._GRAPH_CACHE[0] is second
+    assert max(path) < len(second)
+
+
 def test_viz_walk_returns_track_path_and_distance_math(client, seeded_corpus):
     start = seeded_corpus[0]["track_id"]
     end = seeded_corpus[-1]["track_id"]
