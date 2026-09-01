@@ -20,6 +20,7 @@ from pydantic import BaseModel
 
 from contract.features import AXES
 from music_recommendations.analysis import analyze_track
+from music_recommendations.analysis.schema import METRICS
 from music_recommendations.server import deezer, store
 from music_recommendations.server.axes import AXIS_FEATURES
 
@@ -139,8 +140,13 @@ def recommend(track_id: str, axis: str, limit: int = 10) -> dict:
         )
         from music_recommendations.server import rank as rank_mod
 
-        order = rank_mod.rank(seed_vec, matrix, direction=direction, limit=limit)
-        similarity = rank_mod.scores(seed_vec, matrix)
+        # The right metric depends on how the vector was built, so analysis
+        # declares it per feature key rather than the server assuming cosine.
+        metric = METRICS.get(feature_key, "cosine")
+        order = rank_mod.rank(
+            seed_vec, matrix, direction=direction, limit=limit, metric=metric
+        )
+        similarity = rank_mod.scores(seed_vec, matrix, metric)
         results = []
         for idx in order:
             track = store.get_track(candidate_ids[idx])
