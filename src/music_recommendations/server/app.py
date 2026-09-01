@@ -10,8 +10,10 @@ Routes:
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import threading
+import time
 import urllib.request
 from pathlib import Path
 
@@ -42,7 +44,9 @@ def _fixture_track(track_id: str) -> dict | None:
 
 
 def _download_preview(url: str) -> Path:
-    path = Path(tempfile.mkstemp(suffix=".mp3")[1])
+    fd, name = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    path = Path(name)
     with urllib.request.urlopen(url, timeout=10) as resp:
         path.write_bytes(resp.read())
     return path
@@ -113,14 +117,50 @@ def seed(req: SeedRequest) -> dict:
 
     try:
         mp3 = _download_preview(track["preview_url"])
+    except OSError:
+        # Deezer preview fetch failed -- flake, timeout, 404. urllib raises
+        # OSError subclasses (URLError, socket.timeout included). Don't 500
+        # on a transient failure; hand the job to the Mac embed worker.
+        return _seed_via_worker(req.track_id, track)
+
+    try:
         features = _to_plain(analyze_track(mp3))
         _safe(store.put_track, track, features)
     except (NotImplementedError, ImportError):
-        # Analysis unavailable — stub not landed, or essentia can't import on
-        # this host (no aarch64 wheels on the ARM VM). Mock-first: the seed is
-        # "ready" and /recommend serves its fixture fallback.
-        pass
+        # Analysis can't run on this host (no aarch64 essentia wheels on the
+        # ARM VM). Hand the job to the Mac embed worker via Redis and wait.
+        return _seed_via_worker(req.track_id, track)
+    finally:
+        mp3.unlink(missing_ok=True)
     return ready
+
+
+# How long /seed waits for the embed worker before failing loudly. Module
+# constants so tests can shrink them instead of sleeping 20 real seconds.
+_EMBED_WAIT_S = 20.0
+_EMBED_POLL_S = 0.5
+
+
+def _seed_via_worker(track_id: str, track: dict) -> dict:
+    _safe(store.put_track_meta, track)
+    queued = _safe(store.enqueue_embed, track_id)
+    if queued is None:
+        # Redis is down: there is no queue to hand to and no features to
+        # await. Mock-first as before -- "ready", fixture-fallback recs.
+        return {"track_id": track_id, "status": "ready"}
+    status = "ready" if _await_features(track_id) else "unanalyzed"
+    return {"track_id": track_id, "status": status}
+
+
+def _await_features(track_id: str) -> bool:
+    """Poll until the worker writes features:{id}, or the wait window closes."""
+    deadline = time.monotonic() + _EMBED_WAIT_S
+    while True:
+        if _safe(store.get_features, track_id) is not None:
+            return True
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(_EMBED_POLL_S)
 
 
 class _CorpusMatrix(NamedTuple):
