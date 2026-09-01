@@ -99,6 +99,22 @@ def _write_wav(samples: "np.ndarray", sample_rate: int) -> Path:
     return path
 
 
+# Attribution analysis window. Long enough that the narrowest log-spaced
+# band still spans plenty of bins (1.95 Hz each at 16 kHz); hop is half the
+# window so the Hann overlap-add stays COLA.
+ATTRIBUTION_FFT = 8192
+ATTRIBUTION_HOP = 4096
+
+
+def _shared_gain(signals: "list[np.ndarray]", headroom: float = 0.98) -> float:
+    """One scale factor for a whole set of waveforms: never clips any of
+    them, and never changes their levels relative to each other."""
+    import numpy as np
+
+    peak = max((float(np.max(np.abs(s))) for s in signals), default=0.0)
+    return headroom / peak if peak > headroom else 1.0
+
+
 def _embed_waveform(embed_mod, samples: "np.ndarray") -> "np.ndarray":
     """Mean EffNet embedding of a raw waveform, via a temp wav (the model's
     loader takes a path). Always cleans the file up."""
@@ -148,23 +164,37 @@ def process_attribution(seed_id: str, rec_id: str) -> bool:
         mp3 = download_preview(track["preview_url"])
         audio = embed_mod.load_audio(mp3)          # mono, 16 kHz — model rate
 
+        edges = viz.band_edges()
+        # A long window on purpose: at 2048 the bins are 7.8 Hz and the
+        # lowest log-spaced bands are only a few bins wide, so adjacent
+        # bands would come out as the same filter and their attributions
+        # would be indistinguishable.
+        counterfactuals = [
+            viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz,
+                          fft_size=ATTRIBUTION_FFT, hop=ATTRIBUTION_HOP)
+            for lo_hz, hi_hz in edges
+        ]
+
+        # ONE gain for the clean reference and every counterfactual. Shared,
+        # so no band gets make-up gain the model could read as spectral
+        # change; sized against the loudest of them, because deleting a band
+        # that opposed a peak can push the residual above full scale, and a
+        # clipped sample is broadband distortion charged to that band.
+        gain = _shared_gain([audio, *counterfactuals])
+
         # Deltas are measured against the clean audio pushed through this
-        # SAME wav path, not against the stored embedding: the stored one
-        # came from the mp3, and mp3-vs-wav decode differences would land in
-        # every delta as a constant. `base` still reports the stored cosine,
-        # so the number on screen matches the score the rest of the app shows.
-        reference = _embed_waveform(embed_mod, audio)
+        # SAME wav path at the SAME gain, not against the stored embedding:
+        # the stored one came from the mp3, and the decode and level
+        # differences would land in every delta as a constant. `base` still
+        # reports the stored cosine, so the number on screen matches the
+        # score the rest of the app shows.
+        reference = _embed_waveform(embed_mod, audio * gain)
         reference_similarity = _cosine(reference, rec_vec)
 
         bands = []
-        for lo_hz, hi_hz in viz.band_edges():
+        for (lo_hz, hi_hz), filtered in zip(edges, counterfactuals):
             started = time.monotonic()
-            # A long window on purpose: at 2048 the bins are 7.8 Hz and the
-            # lowest log-spaced bands are only a few bins wide, so adjacent
-            # bands would become the same filter.
-            filtered = viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz,
-                                     fft_size=8192, hop=4096)
-            occluded = _embed_waveform(embed_mod, filtered)
+            occluded = _embed_waveform(embed_mod, filtered * gain)
             delta = reference_similarity - _cosine(occluded, rec_vec)
             bands.append({"lo_hz": round(lo_hz, 1), "hi_hz": round(hi_hz, 1),
                           "delta": float(delta)})
