@@ -24,6 +24,11 @@ nonisolated struct MelSpectrogram {
     /// Per band: first FFT bin plus the triangular weights from there up.
     private let filters: [(start: Int, weights: [Float])]
     private let melCenters: [Double]
+    /// bands+2 Hz edges of the equal-mel triangular filterbank (band b's
+    /// triangle spans edges[b]...edges[b+2]) — exposed so band-solo (T2.5)
+    /// can map a selected band range to an Hz range using the exact same
+    /// slicing the rendered spectrogram uses.
+    let bandEdgesHz: [Double]
 
     init(bands: Int, sampleRate: Double, minHz: Double = 20,
          fftSize: Int = 1024, hop: Int = 512) {
@@ -44,6 +49,7 @@ nonisolated struct MelSpectrogram {
             Self.hz(fromMel: melMin + (melMax - melMin) * Double($0) / Double(bands + 1))
         }
         self.melCenters = edges[1...bands].map(Self.mel(fromHz:))
+        self.bandEdgesHz = edges
 
         let binHz = sampleRate / Double(fftSize)
         let nBins = fftSize / 2
@@ -77,6 +83,14 @@ nonisolated struct MelSpectrogram {
         return melCenters.indices.min {
             abs(melCenters[$0] - target) < abs(melCenters[$1] - target)
         } ?? 0
+    }
+
+    /// Hz span covered by bands `range` (inclusive), using the same
+    /// triangular filter edges the filterbank itself was built from.
+    func hzRange(forBands range: ClosedRange<Int>) -> (lo: Double, hi: Double) {
+        let lo = bandEdgesHz[max(0, min(range.lowerBound, bands - 1))]
+        let hi = bandEdgesHz[max(0, min(range.upperBound, bands - 1)) + 2]
+        return (lo, hi)
     }
 
     // MARK: - Spectrogram
