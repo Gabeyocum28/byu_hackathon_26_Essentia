@@ -70,21 +70,6 @@ wheels = [
 ]
 
 [[package]]
-name = "essentia"
-version = "2.1b6.dev1389"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-    { name = "pyyaml" },
-    { name = "six" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f1/50/7978ea2df768c050b6d711b69b12823b7022778e3735da79eb6ae3dd70e5/essentia-2.1b6.dev1389-cp311-cp311-macosx_13_0_x86_64.whl", hash = "sha256:b2f88f724325200b38da3f2e9eee083ee954d08f700f5ec0a436686e11b8f8da", size = 21946267, upload-time = "2025-07-24T21:07:59.916Z" },
-    { url = "https://files.pythonhosted.org/packages/4a/2c/7a39ec8648e0c1f2dd062bd379945d18f311961090f3c6f951ae3d6e993b/essentia-2.1b6.dev1389-cp311-cp311-macosx_15_0_arm64.whl", hash = "sha256:819c52ae8964e8ebd63942679908a810a88e97657075a7aeb428ebb422a80340", size = 20350758, upload-time = "2025-07-24T21:08:02.733Z" },
-    { url = "https://files.pythonhosted.org/packages/ad/b4/fa123819f7f169eecbd34138bbd8ee21fa63e66748b92f910f5ace5fd928/essentia-2.1b6.dev1389-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:59925891f222f8c68575e84f4109973084db2a2df0ab7a73d69c3f592fc45971", size = 13764332, upload-time = "2025-07-24T21:08:05.51Z" },
-]
-
-[[package]]
 name = "essentia-tensorflow"
 version = "2.1b6.dev1389"
 source = { registry = "https://pypi.org/simple" }
@@ -175,7 +160,6 @@ name = "music-recommendations"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "essentia" },
     { name = "fastapi" },
     { name = "numpy" },
     { name = "redis" },
@@ -193,7 +177,6 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "essentia", specifier = ">=2.1b6.dev1389" },
     { name = "essentia-tensorflow", marker = "extra == 'analysis'" },
     { name = "fastapi", specifier = ">=0.110" },
     { name = "httpx", marker = "extra == 'dev'", specifier = ">=0.27" },

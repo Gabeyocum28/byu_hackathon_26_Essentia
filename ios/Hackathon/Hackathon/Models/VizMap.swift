@@ -76,6 +76,8 @@ nonisolated struct VizMap: Decodable {
 
     /// cosine: score = dot / (seedNorm * recNorm)
     /// euclidean: score = 1 / (1 + distance)
+    /// blend: score is a weighted mean of the `parts` percentiles, so no
+    /// single formula equals it - the panel shows the parts instead.
     struct ScoreMath: Decodable {
         let metric: String
         let dot: Double
@@ -83,12 +85,14 @@ nonisolated struct VizMap: Decodable {
         let recNorm: Double
         let distance: Double?
         let centrality: Double?
+        /// Per-feature-key percentile, present only on a blended axis.
+        var parts: [String: Double]? = nil
 
         enum CodingKeys: String, CodingKey {
             case metric, dot
             case seedNorm = "seed_norm"
             case recNorm = "rec_norm"
-            case distance, centrality
+            case distance, centrality, parts
         }
     }
 
@@ -96,6 +100,8 @@ nonisolated struct VizMap: Decodable {
         let id: String
         let metric: String
         let direction: Int
+        /// Weight per feature key, present only on a blended axis.
+        var weights: [String: Double]? = nil
     }
 
     let points: Points

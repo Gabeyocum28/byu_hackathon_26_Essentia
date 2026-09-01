@@ -18,6 +18,7 @@ struct ContentView: View {
                 NowPlayingBar()
             }
             .environment(playback)
+            .preferredColorScheme(.dark)
     }
 }
 

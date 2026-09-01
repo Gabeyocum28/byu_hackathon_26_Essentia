@@ -45,7 +45,10 @@ class Head:
 # The four binary mood heads used "model/Placeholder" -> "model/Softmax", and
 # disagree on which class index is positive; heads.py resolves that per head
 # from the model's own JSON rather than assuming.
-HEADS: dict[str, Head] = {}
+HEADS: dict[str, Head] = {
+    "genre": Head("genre_discogs400-discogs-effnet-1.pb", 400,
+                  "serving_default_model_Placeholder", "PartitionedCall:0"),
+}
 
 
 def model_url(filename: str) -> str:

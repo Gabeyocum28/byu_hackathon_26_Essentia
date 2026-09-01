@@ -2,6 +2,8 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDisplayName</key>
+	<string>BestRec</string>
 	<!-- Allow cleartext HTTP to localhost/local domains so the app can reach the
 	     dev mock server at http://localhost:8000, plus a single exception for
 	     the team server on the Oracle VM. Does not permit arbitrary insecure

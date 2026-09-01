@@ -153,7 +153,14 @@ def fake_features(i: int, n: int) -> dict:
     v[0] = 1.0
     v[1] = i / max(n - 1, 1)
     v[2] = float(i % 3)
-    return {"embedding": v, "groove": [120.0 + i, 0.9, 3.0, 0.5 + 0.01 * i]}
+    g = [0.0] * 400
+    g[i % 4] = 1.0
+    g[4] = i / max(n - 1, 1)
+    return {
+        "embedding": v,
+        "genre": g,
+        "groove": [120.0 + i, 0.9, 3.0, 0.5 + 0.01 * i],
+    }
 
 
 @pytest.fixture
@@ -275,16 +282,43 @@ def test_viz_map_can_disable_surprise_correction(client, seeded_corpus):
     assert all(rec["math"]["centrality"] is None for rec in body["recs"])
 
 
-def test_viz_map_groove_axis_reports_euclidean(client, seeded_corpus):
+def test_viz_map_rejects_unknown_axis(client, seeded_corpus):
     tid = seeded_corpus[0]["track_id"]
-    body = client.get(
-        "/viz/map", params={"track_id": tid, "axis": "groove", "limit": 3}
-    ).json()
-    assert body["axis"]["metric"] == "euclidean"
+    assert client.get(
+        "/viz/map", params={"track_id": tid, "axis": "groove"}
+    ).status_code == 400
+
+
+def test_viz_map_serves_blended_axis(client, seeded_corpus):
+    """Insights opens on whichever axis the user picked, best_match included:
+    before, a blended axis 400d here and the screen showed its error state."""
+    tid = seeded_corpus[0]["track_id"]
+    r = client.get(
+        "/viz/map", params={"track_id": tid, "axis": "best_match", "limit": 3}
+    )
+    assert r.status_code == 200
+    body = r.json()
+    assert body["axis"]["metric"] == "blend"
+    assert body["axis"]["weights"] == {"embedding": 0.5, "genre": 0.5}
+    assert len(body["recs"]) == 3
+    # The score is the fused percentile, so it is bounded and ordered ...
+    scores = [rec["score"] for rec in body["recs"]]
+    assert scores == sorted(scores, reverse=True)
+    assert all(0.0 <= s <= 1.0 for s in scores)
     for rec in body["recs"]:
-        # score = 1/(1+distance) must hold, so the panel can show the distance
-        assert rec["math"]["distance"] is not None
-        assert rec["score"] == pytest.approx(1.0 / (1.0 + rec["math"]["distance"]))
+        # ... and every weighted key reports its own percentile, so the panel
+        # can show the blend rather than a formula that isn't the score.
+        assert set(rec["math"]["parts"]) == {"embedding", "genre"}
+
+
+def test_viz_map_blended_axis_matches_recommend_order(client, seeded_corpus):
+    """Insights must explain the list the user saw, not re-rank it."""
+    tid = seeded_corpus[0]["track_id"]
+    params = {"track_id": tid, "axis": "best_match", "limit": 4}
+    recs = client.get("/recommend", params=params).json()["results"]
+    viz_recs = client.get("/viz/map", params=params).json()["recs"]
+    assert [r["track_id"] for r in viz_recs] == [r["track_id"] for r in recs]
+    assert [r["score"] for r in viz_recs] == [r["score"] for r in recs]
 
 
 # ---- T1: walk, histogram, and hubs ----

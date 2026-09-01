@@ -27,7 +27,7 @@ from contract.features import AXES
 from music_recommendations.analysis import analyze_track
 from music_recommendations.analysis.schema import METRICS
 from music_recommendations.server import deezer, store, viz
-from music_recommendations.server.axes import AXIS_FEATURES
+from music_recommendations.server.axes import AXIS_FEATURES, BLENDED_AXES
 
 app = FastAPI(title="Essencia")
 
@@ -243,20 +243,75 @@ def _build(corpus: tuple[str, ...], feature_key: str, metric: str,
     return cached.ids, cached.matrix, (cached.correction if want_correction else None)
 
 
+def _percentile(values: np.ndarray) -> np.ndarray:
+    """Each score as "better than X% of the corpus", 0-100.
+
+    Blending raw scores across feature keys is meaningless: cosine and
+    euclidean-derived similarities occupy different ranges, so a weighted sum
+    is decided by whichever happens to have the wider spread. Percentiles are
+    scale-free, and they are also the only version of the number a listener
+    can read -- 0.835 says nothing, 99.9 says a great deal.
+    """
+    if len(values) < 2:
+        return np.zeros(len(values))
+    return 100.0 * values.argsort().argsort() / (len(values) - 1)
+
+
+def _blended(corpus: tuple[str, ...], seed_features: dict,
+             weights: dict[str, float]) -> tuple[list[str], np.ndarray, dict[str, np.ndarray]]:
+    """Weighted mean of per-key percentiles; also returns each key's own."""
+    from music_recommendations.server import rank as rank_mod
+
+    base_ids: list[str] = []
+    fused = np.zeros(0)
+    parts: dict[str, np.ndarray] = {}
+
+    for feature_key, weight in weights.items():
+        metric = METRICS.get(feature_key, "cosine")
+        ids, matrix, _ = _corpus_matrix(corpus, feature_key, metric,
+                                        want_correction=False)
+        if not ids or feature_key not in seed_features:
+            continue
+        ranked = _percentile(
+            rank_mod.scores(_vector(seed_features, feature_key), matrix, metric)
+        )
+        if not base_ids:
+            base_ids, fused = ids, np.zeros(len(ids))
+        elif ids != base_ids:
+            # A track missing one feature is not in that key's rows; line the
+            # columns back up rather than adding mismatched positions.
+            at = {t: i for i, t in enumerate(ids)}
+            ranked = np.array([ranked[at[t]] if t in at else 0.0 for t in base_ids])
+        parts[feature_key] = ranked
+        fused = fused + weight * ranked
+
+    return base_ids, fused, parts
+
+
 @app.get("/recommend")
 def recommend(track_id: str, axis: str,
               limit: int = Query(10, ge=1, le=50)) -> dict:
-    if axis not in AXIS_FEATURES:
+    if axis not in AXIS_FEATURES and axis not in BLENDED_AXES:
         raise HTTPException(400, f"unknown axis {axis!r}")
 
-    feature_key, direction = AXIS_FEATURES[axis]
     seed_features = _safe(store.get_features, track_id)
     corpus = tuple(_safe(store.corpus_ids, default=[]))
     ranked_against = [i for i in corpus if i != track_id]
 
     if seed_features is None or not ranked_against:
         results = _fixture_fallback(track_id, limit)
+    elif axis in BLENDED_AXES:
+        ids, fused, parts = _blended(corpus, seed_features, BLENDED_AXES[axis])
+        results = []
+        for idx in np.argsort(fused)[::-1]:
+            if ids[idx] == track_id:
+                continue
+            track = store.get_track(ids[idx])
+            results.append({**track, "score": round(float(fused[idx]) / 100.0, 4)})
+            if len(results) == limit:
+                break
     else:
+        feature_key, direction = AXIS_FEATURES[axis]
         from music_recommendations.server import rank as rank_mod
 
         # The right metric depends on how the vector was built, so analysis
@@ -332,10 +387,10 @@ def viz_map(track_id: str, axis: str,
             correction: Literal["on", "off"] = "on") -> dict:
     """Everything the wow screen needs in one payload: the whole corpus as 2D
     points, the seed, and the recs with the actual numbers behind each score."""
-    if axis not in AXIS_FEATURES:
+    blended_weights = BLENDED_AXES.get(axis)
+    if blended_weights is None and axis not in AXIS_FEATURES:
         raise HTTPException(400, f"unknown axis {axis!r}")
 
-    feature_key, direction = AXIS_FEATURES[axis]
     seed_features = _safe(store.get_features, track_id)
     corpus = tuple(_safe(store.corpus_ids, default=[]))
     if seed_features is None or not corpus:
@@ -351,14 +406,31 @@ def viz_map(track_id: str, axis: str,
 
     from music_recommendations.server import rank as rank_mod
 
-    metric = METRICS.get(feature_key, "cosine")
-    use_correction = direction == -1 and correction == "on"
-    ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
-                                             want_correction=use_correction)
-    seed_vec = _vector(seed_features, feature_key)
-    order = rank_mod.rank(seed_vec, matrix, direction=direction,
-                          limit=limit + 1, metric=metric, correction=correction)
-    similarity = rank_mod.scores(seed_vec, matrix, metric)
+    if blended_weights is not None:
+        # A blended axis scores in no single vector space, so there is no one
+        # metric to report. Rank on the same fused percentile /recommend uses:
+        # Insights has to explain the list the user actually saw, and a second
+        # ranking here would show different neighbours than the rec list did.
+        direction, use_correction = 1, False
+        seed_vec = _vector(seed_features, "embedding")
+        ids, fused, parts = _blended(corpus, seed_features, blended_weights)
+        order = np.argsort(fused)[::-1]
+        # The panel still gets real arithmetic: embedding cosine is the number
+        # the map's own axes are drawn from, and `parts` carries each key's
+        # percentile so the blend can be shown as the sum it is.
+        emb_at = {tid: i for i, tid in enumerate(emb_ids)}
+        metric, matrix, correction = "cosine", emb_matrix, None
+    else:
+        feature_key, direction = AXIS_FEATURES[axis]
+        metric = METRICS.get(feature_key, "cosine")
+        use_correction = direction == -1 and correction == "on"
+        ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
+                                                 want_correction=use_correction)
+        seed_vec = _vector(seed_features, feature_key)
+        order = rank_mod.rank(seed_vec, matrix, direction=direction,
+                              limit=limit + 1, metric=metric,
+                              correction=correction)
+        similarity = rank_mod.scores(seed_vec, matrix, metric)
 
     recs = []
     for idx in order:
@@ -368,16 +440,30 @@ def viz_map(track_id: str, axis: str,
         track = _safe(store.get_track, rec_id)
         features = _safe(store.get_features, rec_id, default={})
         pos = position[rec_id]
+        if blended_weights is not None:
+            row = emb_at.get(rec_id)
+            if row is None:
+                continue
+            score = round(float(fused[idx]) / 100.0, 4)
+            math = viz.score_math(seed_vec, matrix[row], metric, None)
+            math["metric"] = "blend"
+            math["parts"] = {
+                key: round(float(values[idx]), 1)
+                for key, values in parts.items()
+            }
+        else:
+            score = float(similarity[idx])
+            math = viz.score_math(
+                seed_vec, matrix[idx], metric,
+                float(correction[idx]) if correction is not None else None,
+            )
         recs.append({
             **(track or {"track_id": rec_id}),
-            "score": float(similarity[idx]),
+            "score": score,
             "x": float(xy[pos, 0]),
             "y": float(xy[pos, 1]),
             "groove": (features or {}).get("groove"),
-            "math": viz.score_math(
-                seed_vec, matrix[idx], metric,
-                float(correction[idx]) if correction is not None else None,
-            ),
+            "math": math,
         })
         if len(recs) == limit:
             break
@@ -402,6 +488,9 @@ def viz_map(track_id: str, axis: str,
             "preview_url": None,
         })
     axis_info = {"id": axis, "metric": metric, "direction": direction}
+    if blended_weights is not None:
+        axis_info["metric"] = "blend"
+        axis_info["weights"] = dict(blended_weights)
     if direction == -1:
         axis_info["correction"] = "on" if use_correction else "off"
 
