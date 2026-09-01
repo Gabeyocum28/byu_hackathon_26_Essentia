@@ -5,27 +5,46 @@
 """
 from __future__ import annotations
 
+import json
+import os
+
+_client = None
+
 
 def client() -> "redis.Redis":
     """Lazily construct and cache the Redis client."""
-    raise NotImplementedError
+    global _client
+    if _client is None:
+        import redis
+
+        _client = redis.Redis.from_url(
+            os.environ.get("REDIS_URL", "redis://localhost:6379/0"),
+            decode_responses=True,
+        )
+    return _client
 
 
 def put_track(track: dict, features: dict) -> None:
     """Write a track's contract fields and analyzed features into Redis."""
-    raise NotImplementedError
+    r = client()
+    track_id = track["track_id"]
+    r.set(f"track:{track_id}", json.dumps(track))
+    r.set(f"features:{track_id}", json.dumps(features))
+    r.sadd("corpus:ids", track_id)
 
 
 def get_track(track_id: str) -> dict | None:
     """Read a track's contract fields, or None if not present."""
-    raise NotImplementedError
+    raw = client().get(f"track:{track_id}")
+    return json.loads(raw) if raw else None
 
 
 def get_features(track_id: str) -> dict | None:
     """Read a track's analyzed features, or None if not present."""
-    raise NotImplementedError
+    raw = client().get(f"features:{track_id}")
+    return json.loads(raw) if raw else None
 
 
 def corpus_ids() -> list[str]:
     """All track ids currently analyzed and stored."""
-    raise NotImplementedError
+    return sorted(client().smembers("corpus:ids"))
