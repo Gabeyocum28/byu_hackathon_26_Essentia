@@ -36,7 +36,7 @@ The killer property: our measurements *match the theory to three decimals*
 3. **Proof (30s)** — "Is 0.834 good? Here's this seed against all 2,634
    tracks." *(Histogram; recs glowing in the tail; percentile.)* "And here's
    what this histogram would look like if music were random noise — a spike
-   of width 1/√1280. Concentration of measure, live." 
+   of width 1/√1280. Concentration of measure, live."
 4. **The Walk (40s)** — "Watch us walk from Django Reinhardt to Korn." *(Path
    animates through 7 stepping stones; play 3 seconds of each.)* "The straight
    line through 1280-d space crosses silence. The geodesic through the
@@ -47,7 +47,7 @@ The killer property: our measurements *match the theory to three decimals*
    homology H0 barcode drawn live.)*
 6. **Audience moment (30s)** — "Someone name two artists." Walk between them.
    Or (stretch): record 10 seconds of the room and watch it appear as a new
-   star. 
+   star.
 6b. **Optional: hear the why (30s)** — "The model says these two are 0.83
    similar. Which frequencies carry that?" *(Attribution bars appear; tap the
    tallest.)* "We deleted this band and the similarity dropped 40% — here's
