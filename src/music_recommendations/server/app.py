@@ -143,8 +143,14 @@ def recommend(track_id: str, axis: str, limit: int = 10) -> dict:
         # The right metric depends on how the vector was built, so analysis
         # declares it per feature key rather than the server assuming cosine.
         metric = METRICS.get(feature_key, "cosine")
+        # On a most-distant axis, correct for how far each track is from the
+        # whole corpus — otherwise the few globally-odd tracks win every seed.
+        correction = (
+            rank_mod.centrality(matrix, metric) if direction == -1 else None
+        )
         order = rank_mod.rank(
-            seed_vec, matrix, direction=direction, limit=limit, metric=metric
+            seed_vec, matrix, direction=direction, limit=limit, metric=metric,
+            correction=correction,
         )
         similarity = rank_mod.scores(seed_vec, matrix, metric)
         results = []
