@@ -35,7 +35,7 @@ struct ProofModeView: View {
                 .font(.headline)
                 Text(correctionEnabled
                      ? "subtracting each track’s mean corpus similarity"
-                     : "raw distance — hubs can dominate")
+                     : "raw distance can over-reward global outliers")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 if let errorMessage {

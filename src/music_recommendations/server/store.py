@@ -39,6 +39,14 @@ def get_track(track_id: str) -> dict | None:
     return json.loads(raw) if raw else None
 
 
+def get_many_tracks(track_ids: list[str]) -> list[dict | None]:
+    """Read many track records in one round trip, preserving input order."""
+    if not track_ids:
+        return []
+    raw = client().mget([f"track:{t}" for t in track_ids])
+    return [json.loads(record) if record else None for record in raw]
+
+
 def get_features(track_id: str) -> dict | None:
     """Read a track's analyzed features, or None if not present."""
     raw = client().get(f"features:{track_id}")

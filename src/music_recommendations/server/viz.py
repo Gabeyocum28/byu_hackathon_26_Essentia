@@ -18,14 +18,16 @@ import threading
 import numpy as np
 
 
-_PAIRWISE_LOCK = threading.Lock()
+_PAIRWISE_LOCK = threading.RLock()
 _PAIRWISE_CACHE: tuple[np.ndarray, np.ndarray] | None = None
+_GRAPH_CACHE: dict[tuple[int, int], list[dict[int, float]]] = {}
 
 
 def clear_geometry_cache() -> None:
     global _PAIRWISE_CACHE
     with _PAIRWISE_LOCK:
         _PAIRWISE_CACHE = None
+        _GRAPH_CACHE.clear()
 
 
 def normalized_rows(matrix: np.ndarray) -> np.ndarray:
@@ -54,9 +56,10 @@ def shortest_walk(matrix: np.ndarray, start: int, end: int,
                   k: int = 8) -> tuple[list[int], float, float]:
     """Dijkstra on the symmetrized k-NN graph of normalized embeddings.
 
-    Neighbor choice is cosine-equivalent. Edge length is the Euclidean chord
-    between unit vectors, which preserves that neighbor order and gives the
-    metric Isomap needs for a meaningful geodesic/ambient detour ratio.
+    Both the k-NN edges and their weights use cosine distance (1 - cosine),
+    matching the numbers shown in the walkthrough. The graph is cached by
+    matrix identity and k because embedding matrices are already cache-owned
+    by the server for the lifetime of a corpus snapshot.
     """
     matrix = np.asarray(matrix, dtype=float)
     n = len(matrix)
@@ -66,17 +69,22 @@ def shortest_walk(matrix: np.ndarray, start: int, end: int,
         return [start], 0.0, 0.0
     k = min(max(int(k), 1), n - 1)
 
-    similarity = pairwise_cosine(matrix)
-    chord = np.sqrt(np.maximum(0.0, 2.0 - 2.0 * similarity))
-    adjacency: list[dict[int, float]] = [dict() for _ in range(n)]
-    for i in range(n):
-        candidates = np.argpartition(chord[i], k)[:k + 1]
-        neighbors = [int(j) for j in candidates if j != i]
-        neighbors.sort(key=lambda j: (chord[i, j], j))
-        for j in neighbors[:k]:
-            weight = float(chord[i, j])
-            adjacency[i][j] = min(adjacency[i].get(j, weight), weight)
-            adjacency[j][i] = min(adjacency[j].get(i, weight), weight)
+    cache_key = (id(matrix), k)
+    with _PAIRWISE_LOCK:
+        adjacency = _GRAPH_CACHE.get(cache_key)
+        if adjacency is None:
+            similarity = pairwise_cosine(matrix)
+            distance = 1.0 - similarity
+            adjacency = [dict() for _ in range(n)]
+            for i in range(n):
+                candidates = np.argpartition(distance[i], k)[:k + 1]
+                neighbors = [int(j) for j in candidates if j != i]
+                neighbors.sort(key=lambda j: (distance[i, j], j))
+                for j in neighbors[:k]:
+                    weight = float(distance[i, j])
+                    adjacency[i][j] = min(adjacency[i].get(j, weight), weight)
+                    adjacency[j][i] = min(adjacency[j].get(i, weight), weight)
+            _GRAPH_CACHE[cache_key] = adjacency
 
     distances = [float("inf")] * n
     previous = [-1] * n
@@ -105,7 +113,8 @@ def shortest_walk(matrix: np.ndarray, start: int, end: int,
             break
         node = previous[node]
     path.reverse()
-    return path, float(distances[end]), float(chord[start, end])
+    similarity = pairwise_cosine(matrix)
+    return path, float(distances[end]), float(1.0 - similarity[start, end])
 
 
 def project_2d(matrix: np.ndarray) -> np.ndarray:

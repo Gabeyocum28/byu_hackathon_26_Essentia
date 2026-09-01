@@ -32,6 +32,16 @@ def test_get_missing_track_returns_none(fake_redis):
     assert store.get_features("nope") is None
 
 
+def test_get_many_tracks_preserves_requested_order_and_missing_values(fake_redis):
+    store.put_track(TRACK, FEATURES)
+
+    assert store.get_many_tracks(["nope", "42", "also-nope"]) == [
+        None,
+        TRACK,
+        None,
+    ]
+
+
 def test_corpus_ids_empty_when_no_tracks(fake_redis):
     assert store.corpus_ids() == []
 

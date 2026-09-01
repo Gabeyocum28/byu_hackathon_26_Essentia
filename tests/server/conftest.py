@@ -9,6 +9,7 @@ class FakeRedis:
         self.kv = {}
         self.sets = {}
         self.lists = {}
+        self.mget_calls = []
 
     def set(self, key, value, ex=None):
         self.kv[key] = value
@@ -17,6 +18,7 @@ class FakeRedis:
         return self.kv.get(key)
 
     def mget(self, keys):
+        self.mget_calls.append(keys)
         return [self.kv.get(k) for k in keys]
 
     def exists(self, key):

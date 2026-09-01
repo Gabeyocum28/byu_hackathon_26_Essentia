@@ -101,6 +101,17 @@ def test_viz_map_point_metadata_stays_aligned_with_coordinates(client, seeded_co
     assert all(track["title"] and track["artist"] for track in points["tracks"])
 
 
+def test_viz_map_reads_all_point_metadata_in_one_bulk_request(
+    client, seeded_corpus, fake_redis
+):
+    tid = seeded_corpus[0]["track_id"]
+    client.get("/viz/map", params={"track_id": tid, "axis": "sounds_like"})
+
+    track_reads = [keys for keys in fake_redis.mget_calls if keys[0].startswith("track:")]
+    assert len(track_reads) == 1
+    assert len(track_reads[0]) == len(seeded_corpus)
+
+
 def test_viz_map_seed_has_position_and_groove(client, seeded_corpus):
     tid = seeded_corpus[0]["track_id"]
     body = client.get(
@@ -186,7 +197,9 @@ def test_shortest_walk_uses_knn_edges_and_preserves_endpoints():
 
     assert path[0] == 0 and path[-1] == 6
     assert len(path) > 2
-    assert geodesic >= ambient > 0
+    expected_ambient = 1.0 - float(matrix[0] @ matrix[6])
+    assert geodesic > 0
+    assert ambient == pytest.approx(expected_ambient)
 
 
 def test_viz_walk_returns_track_path_and_distance_math(client, seeded_corpus):
@@ -200,7 +213,8 @@ def test_viz_walk_returns_track_path_and_distance_math(client, seeded_corpus):
     assert body["path"][0]["track_id"] == start
     assert body["path"][-1]["track_id"] == end
     assert all("x" in step and "y" in step for step in body["path"])
-    assert body["geodesic"] >= body["ambient"] > 0
+    assert body["geodesic"] > 0
+    assert body["ambient"] > 0
     assert body["detour"] == pytest.approx(body["geodesic"] / body["ambient"])
 
 

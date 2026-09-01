@@ -51,6 +51,7 @@ final class InsightsModel {
     var proofError: String?
 
     private let api: APIClient
+    private var correctionRequestGeneration = 0
 
     init(seed: Track, axis: Axis, api: APIClient = .shared) {
         self.seed = seed
@@ -102,7 +103,9 @@ final class InsightsModel {
     }
 
     var displayMap: VizMap? {
-        mode == .proof ? (proofMap ?? map) : map
+        // The correction is a map-level comparison, so the Galaxy, proof
+        // panel, callout, and recommendation strip always share one result.
+        proofMap ?? map
     }
 
     func activate(_ mode: InsightMode) {
@@ -151,10 +154,13 @@ final class InsightsModel {
 
     func setCorrection(_ enabled: Bool) async {
         correctionEnabled = enabled
+        correctionRequestGeneration += 1
+        let requestGeneration = correctionRequestGeneration
         do {
             let updated = try await api.vizMap(
                 trackID: seed.trackID, axis: "surprise", correction: enabled
             )
+            guard requestGeneration == correctionRequestGeneration else { return }
             withAnimation(.spring(duration: 0.45)) {
                 proofMap = updated
                 selected = updated.recs.first
@@ -164,7 +170,8 @@ final class InsightsModel {
             }
             proofError = nil
         } catch {
-            correctionEnabled.toggle()
+            guard requestGeneration == correctionRequestGeneration else { return }
+            correctionEnabled = !enabled
             proofError = "The correction comparison could not be loaded."
         }
     }
@@ -208,7 +215,7 @@ struct InsightsView: View {
 
                 switch model.mode {
                 case .galaxy:
-                    galaxyMode(map)
+                    galaxyMode(model.displayMap ?? map)
                 case .sound:
                     soundMode(map)
                 case .proof:
