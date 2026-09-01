@@ -27,6 +27,51 @@ struct InsightsInteractionTests {
         )
     )
 
+    /// The screen loads a second map on the "surprise" axis so the Proof
+    /// tab's hubness toggle has something to compare. Letting that map lead
+    /// everywhere replaced the axis the user actually chose — the galaxy and
+    /// rec strip showed surprise picks after asking for "sounds like".
+    @Test func onlyProofModeFollowsTheSurpriseComparisonMap() {
+        let model = InsightsModel(
+            seed: seed,
+            axis: Axis(id: "sounds_like", label: "Sounds like this")
+        )
+        model.map = Self.map(recTrackID: "chosen", axisID: "sounds_like")
+        model.proofMap = Self.map(recTrackID: "surprise", axisID: "surprise")
+
+        model.activate(.galaxy)
+        #expect(model.displayMap?.recs.first?.trackID == "chosen")
+        #expect(model.selected?.trackID == "chosen")
+
+        model.activate(.sound)
+        #expect(model.displayMap?.recs.first?.trackID == "chosen")
+
+        model.activate(.proof)
+        #expect(model.displayMap?.recs.first?.trackID == "surprise")
+        #expect(model.selected?.trackID == "surprise")
+    }
+
+    private static func map(recTrackID: String, axisID: String) -> VizMap {
+        let rec = VizMap.Rec(
+            trackID: recTrackID, title: recTrackID, artist: "Artist",
+            album: "Album", artworkURL: nil, previewURL: nil, score: 0.5,
+            x: 0, y: 0, groove: nil,
+            math: VizMap.ScoreMath(metric: "cosine", dot: 0.5, seedNorm: 1,
+                                   recNorm: 1, distance: nil, centrality: nil)
+        )
+        return VizMap(
+            points: VizMap.Points(ids: [recTrackID], x: [0], y: [0],
+                                  tracks: [rec.track]),
+            seed: VizMap.SeedPoint(
+                trackID: "seed", title: "Seed", artist: "Artist",
+                album: "Album", artworkURL: nil, previewURL: nil,
+                x: 0, y: 0, groove: nil
+            ),
+            recs: [rec],
+            axis: VizMap.AxisInfo(id: axisID, metric: "cosine", direction: 1)
+        )
+    }
+
     @Test func selectingArtworkAlsoRequestsPlaybackForThatTrack() {
         let model = InsightsModel(
             seed: seed,
