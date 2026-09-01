@@ -30,10 +30,36 @@ def _to_track(item: dict) -> dict:
 
 
 def search(query: str, limit: int = 25) -> list[dict]:
-    """Search Deezer and return contract-shaped Track dicts (preview required)."""
-    q = urllib.parse.urlencode({"q": query, "limit": limit})
-    data = _get_json(f"{API}/search?{q}").get("data", [])
-    return [_to_track(item) for item in data if item.get("preview")]
+    """Search Deezer and return contract-shaped Track dicts (preview required),
+    most popular first.
+
+    Deezer's fuzzy search misses exact titles with punctuation ("Sing About
+    Me, I'm Dying Of Thirst" returns only lofi covers), while its
+    track:"..." field search finds the original — so both are queried and
+    the union is ordered by Deezer's popularity score ('rank'), which puts
+    the well-known recording above covers. The plain query's failure
+    propagates (the /search fixture fallback depends on it); the extra
+    exact query is best-effort.
+    """
+    data = _search_data(query, limit)
+    try:
+        exact = _search_data(f'track:"{query}"', limit)
+    except Exception:
+        exact = []
+    seen: set = set()
+    merged = []
+    for item in data + exact:
+        if item["id"] in seen:
+            continue
+        seen.add(item["id"])
+        merged.append(item)
+    merged.sort(key=lambda i: i.get("rank", 0), reverse=True)
+    return [_to_track(i) for i in merged if i.get("preview")][:limit]
+
+
+def _search_data(q: str, limit: int) -> list[dict]:
+    query = urllib.parse.urlencode({"q": q, "limit": limit})
+    return _get_json(f"{API}/search?{query}").get("data", [])
 
 
 def get_track(track_id: str) -> dict | None:
