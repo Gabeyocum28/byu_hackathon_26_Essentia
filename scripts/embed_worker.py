@@ -76,26 +76,37 @@ def process_job(track_id: str) -> bool:
             pass
 
 
-def _write_wav(samples: "np.ndarray", sample_rate: int, scale: float) -> Path:
-    """16-bit PCM temp file: MonoLoader wants a path, not an array.
+def _write_wav(samples: "np.ndarray", sample_rate: int) -> Path:
+    """16-bit PCM temp file at the audio's OWN level: MonoLoader wants a
+    path, not an array.
 
-    `scale` is the ORIGINAL track's peak, shared by every band. Normalizing
-    each band-stopped signal to its own peak would hand the loudest bands
-    the most make-up gain, and the model would read that level change as
-    part of the attribution — measuring our own normalizer, not the band.
+    Deliberately no normalization. Any gain here — even one shared by every
+    band — moves the counterfactuals away from the level the clean track was
+    analyzed at, and a log-mel front end reads a level shift as a change in
+    the spectrum, folding a constant bias into all ten deltas.
     """
     import numpy as np
 
     fd, name = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
     path = Path(name)
-    pcm = np.clip(samples / (scale or 1.0) * 0.98, -1.0, 1.0)
+    pcm = np.clip(samples, -1.0, 1.0)
     with wave.open(str(path), "wb") as out:
         out.setnchannels(1)
         out.setsampwidth(2)
         out.setframerate(sample_rate)
         out.writeframes((pcm * 32767).astype("<i2").tobytes())
     return path
+
+
+def _embed_waveform(embed_mod, samples: "np.ndarray") -> "np.ndarray":
+    """Mean EffNet embedding of a raw waveform, via a temp wav (the model's
+    loader takes a path). Always cleans the file up."""
+    wav = _write_wav(samples, embed_mod.SAMPLE_RATE)
+    try:
+        return embed_mod.effnet_frames(wav).mean(axis=0)
+    finally:
+        wav.unlink(missing_ok=True)
 
 
 def _cosine(a: "np.ndarray", b: "np.ndarray") -> float:
@@ -136,18 +147,25 @@ def process_attribution(seed_id: str, rec_id: str) -> bool:
             raise ValueError("no seed metadata in Redis or on Deezer")
         mp3 = download_preview(track["preview_url"])
         audio = embed_mod.load_audio(mp3)          # mono, 16 kHz — model rate
-        scale = float(np.max(np.abs(audio)))
+
+        # Deltas are measured against the clean audio pushed through this
+        # SAME wav path, not against the stored embedding: the stored one
+        # came from the mp3, and mp3-vs-wav decode differences would land in
+        # every delta as a constant. `base` still reports the stored cosine,
+        # so the number on screen matches the score the rest of the app shows.
+        reference = _embed_waveform(embed_mod, audio)
+        reference_similarity = _cosine(reference, rec_vec)
 
         bands = []
         for lo_hz, hi_hz in viz.band_edges():
             started = time.monotonic()
-            filtered = viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz)
-            wav = _write_wav(filtered, embed_mod.SAMPLE_RATE, scale)
-            try:
-                occluded = embed_mod.effnet_frames(wav).mean(axis=0)
-            finally:
-                wav.unlink(missing_ok=True)
-            delta = base - _cosine(occluded, rec_vec)
+            # A long window on purpose: at 2048 the bins are 7.8 Hz and the
+            # lowest log-spaced bands are only a few bins wide, so adjacent
+            # bands would become the same filter.
+            filtered = viz.band_stop(audio, embed_mod.SAMPLE_RATE, lo_hz, hi_hz,
+                                     fft_size=8192, hop=4096)
+            occluded = _embed_waveform(embed_mod, filtered)
+            delta = reference_similarity - _cosine(occluded, rec_vec)
             bands.append({"lo_hz": round(lo_hz, 1), "hi_hz": round(hi_hz, 1),
                           "delta": float(delta)})
             print(f"[embed_worker] attr {seed_id}->{rec_id} "

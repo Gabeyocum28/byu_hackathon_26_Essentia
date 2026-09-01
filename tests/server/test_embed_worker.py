@@ -211,32 +211,45 @@ def test_process_attribution_caches_failure_so_the_phone_stops_polling(fake_redi
     assert cached["error"]
 
 
-def test_attribution_scales_every_band_by_the_original_peak(fake_redis, embedding_stub,
-                                                            monkeypatch, tmp_path):
-    """Each counterfactual must be written at the SAME gain, or the loudest
-    bands get the most make-up gain and the deltas measure our normalizer."""
+def test_write_wav_keeps_the_audio_at_its_own_level(tmp_path):
+    """No normalization anywhere: a gain would move the counterfactuals off
+    the level the clean track was analyzed at, and a log-mel front end reads
+    that as a spectral change."""
     import numpy as np
     import wave as wave_mod
 
+    quiet = 0.25 * np.sin(2 * np.pi * 200 * np.arange(16000) / 16000)
+    path = worker._write_wav(quiet, 16000)
+    try:
+        with wave_mod.open(str(path), "rb") as src:
+            peak = np.abs(np.frombuffer(src.readframes(src.getnframes()),
+                                        dtype="<i2")).max()
+    finally:
+        path.unlink(missing_ok=True)
+
+    assert peak == pytest.approx(0.25 * 32767, rel=0.01)
+
+
+def test_attribution_measures_against_an_identically_processed_reference(
+        fake_redis, embedding_stub, monkeypatch):
+    """Deltas compare wav-vs-wav. Measuring against the stored mp3 embedding
+    would fold the decode difference into all ten bands as a constant."""
     monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
     store.put_track(TRACK, {"embedding": [1.0, 0.0]})
     store.put_track(REC, {"embedding": [1.0, 0.0]})
 
-    written = []
-    original_write = worker._write_wav
+    embeds = []
+    original = worker._embed_waveform
 
-    def spy(samples, sample_rate, scale):
-        path = original_write(samples, sample_rate, scale)
-        with wave_mod.open(str(path), "rb") as src:
-            raw = src.readframes(src.getnframes())
-        written.append(np.abs(np.frombuffer(raw, dtype="<i2")).max())
-        return path
+    def counting(mod, samples):
+        embeds.append(len(samples))
+        return original(mod, samples)
 
-    monkeypatch.setattr(worker, "_write_wav", spy)
+    monkeypatch.setattr(worker, "_embed_waveform", counting)
     assert worker.process_attribution("42", "43") is True
 
-    # Removing different amounts of energy must leave different peaks; if
-    # every file came out at full scale, each was normalized to itself.
-    assert len(written) == 10
-    assert len(set(written)) > 1
-    assert max(written) <= 32767
+    # One clean reference pass, then one per band.
+    assert len(embeds) == 11
+    # base still reports the stored-embedding cosine, so the number on
+    # screen matches the score the rest of the app shows.
+    assert store.get_attribution("42", "43")["base"] == pytest.approx(1.0)

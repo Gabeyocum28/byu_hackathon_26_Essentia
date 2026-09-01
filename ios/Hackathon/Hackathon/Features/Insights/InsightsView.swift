@@ -85,7 +85,6 @@ final class InsightsModel {
 
     private let api: APIClient
     private var correctionRequestGeneration = 0
-    private var attributionTask: Task<Void, Never>?
     private var soloToken = 0
 
     init(seed: Track, axis: Axis, api: APIClient = .shared) {
@@ -144,9 +143,14 @@ final class InsightsModel {
     private static let attributionDeadline: Duration = .seconds(60)
 
     /// Fetches the seed-vs-rec band attribution, polling while the worker
-    /// computes it. Cancels any in-flight request for a different pair.
+    /// computes it.
+    ///
+    /// The loop is deliberately structured — no detached Task — so the
+    /// `.task(id:)` that starts it also cancels it. Wrapping it in an
+    /// unstructured Task and awaiting the value would keep polling for the
+    /// full deadline after the view is gone, because cancellation does not
+    /// cross that boundary.
     func loadAttribution(for rec: VizMap.Rec?) async {
-        attributionTask?.cancel()
         guard let rec else {
             attribution = nil
             attributionPairID = nil
@@ -159,25 +163,25 @@ final class InsightsModel {
         attribution = nil
         attributionSilent = false
 
-        let task = Task { [api, seed] in
-            let deadline = ContinuousClock.now + Self.attributionDeadline
-            while !Task.isCancelled {
-                let answer = try? await api.vizAttribute(seed: seed.trackID,
-                                                         rec: rec.trackID)
-                guard !Task.isCancelled, attributionPairID == pairID else { return }
-                if let answer, !answer.isPending {
-                    attribution = answer
-                    return
-                }
-                if ContinuousClock.now >= deadline {
-                    attributionSilent = true
-                    return
-                }
-                try? await Task.sleep(for: Self.attributionPollInterval)
+        let deadline = ContinuousClock.now + Self.attributionDeadline
+        while !Task.isCancelled {
+            let answer = try? await api.vizAttribute(seed: seed.trackID,
+                                                     rec: rec.trackID)
+            guard !Task.isCancelled, attributionPairID == pairID else { return }
+            if let answer, !answer.isPending {
+                attribution = answer
+                return
+            }
+            if ContinuousClock.now >= deadline {
+                attributionSilent = true
+                return
+            }
+            do {
+                try await Task.sleep(for: Self.attributionPollInterval)
+            } catch {
+                return          // cancelled mid-wait
             }
         }
-        attributionTask = task
-        await task.value
     }
 
     /// Tapping a bar solos that band in whatever the spectrogram is showing.

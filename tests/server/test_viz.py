@@ -629,3 +629,30 @@ def test_viz_attribute_404_when_a_track_is_unanalyzed(client, seeded_corpus):
     tid = seeded_corpus[0]["track_id"]
     assert client.get("/viz/attribute", params={"seed": tid, "rec": "nope"}).status_code == 404
     assert client.get("/viz/attribute", params={"seed": "nope", "rec": tid}).status_code == 404
+
+
+def test_adjacent_low_bands_stay_separable():
+    """The lowest log-spaced bands are only a few bins wide. With a fixed
+    taper they blur into one filter and their attributions become
+    indistinguishable — the tone in band 1 must survive band 2's removal."""
+    bands = viz.band_edges()
+    audio = _tone(80.0)          # inside band 1 (60-98 Hz), not band 2
+
+    stopped = viz.band_stop(audio, 16000, *bands[0], fft_size=8192, hop=4096)
+    untouched = viz.band_stop(audio, 16000, *bands[1], fft_size=8192, hop=4096)
+
+    before = _energy_at(audio, 80.0)
+    assert _energy_at(stopped, 80.0) < before / 50
+    assert _energy_at(untouched, 80.0) > before / 2
+
+
+def test_stop_gain_taper_never_outgrows_the_band_it_softens():
+    freqs = np.fft.rfftfreq(8192, 1.0 / 16000)
+    lo, hi = viz.band_edges()[0]
+
+    gain = viz._stop_gain(freqs, lo, hi, taper_bins=4)
+
+    stopped = np.count_nonzero(gain == 0.0)
+    tapered = np.count_nonzero((gain > 0.0) & (gain < 1.0))
+    assert stopped > 0
+    assert tapered <= stopped
