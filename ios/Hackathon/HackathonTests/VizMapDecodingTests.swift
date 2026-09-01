@@ -13,7 +13,14 @@ struct VizMapDecodingTests {
 
     static let json = """
     {
-      "points": { "ids": ["1", "2", "3"], "x": [0.1, -0.2, 0.3], "y": [0.0, 0.5, -0.5] },
+      "points": {
+        "ids": ["1", "2", "3"], "x": [0.1, -0.2, 0.3], "y": [0.0, 0.5, -0.5],
+        "tracks": [
+          { "track_id": "1", "title": "So What", "artist": "Miles Davis", "album": "Kind of Blue", "artwork_url": null, "preview_url": null },
+          { "track_id": "2", "title": "Freddie Freeloader", "artist": "Miles Davis", "album": "Kind of Blue", "artwork_url": null, "preview_url": null },
+          { "track_id": "3", "title": "Blue in Green", "artist": "Miles Davis", "album": "Kind of Blue", "artwork_url": null, "preview_url": null }
+        ]
+      },
       "seed": {
         "track_id": "1", "title": "So What", "artist": "Miles Davis",
         "album": "Kind of Blue", "artwork_url": "https://a.jpg",
@@ -38,6 +45,7 @@ struct VizMapDecodingTests {
         let map = try JSONDecoder().decode(VizMap.self, from: Data(Self.json.utf8))
         #expect(map.points.ids == ["1", "2", "3"])
         #expect(map.points.x.count == 3)
+        #expect(map.points.tracks.map(\.trackID) == ["1", "2", "3"])
         #expect(map.seed.trackID == "1")
         #expect(map.seed.groove?.count == 4)
         #expect(map.recs.count == 1)

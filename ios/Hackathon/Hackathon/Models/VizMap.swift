@@ -15,6 +15,7 @@ nonisolated struct VizMap: Decodable {
         let ids: [String]
         let x: [Double]
         let y: [Double]
+        let tracks: [Track]
     }
 
     /// The seed's contract fields plus its position and groove vector.

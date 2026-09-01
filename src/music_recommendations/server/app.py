@@ -363,12 +363,23 @@ def viz_map(track_id: str, axis: str,
         "y": float(xy[seed_pos, 1]),
         "groove": seed_features.get("groove"),
     }
+    point_tracks = []
+    for point_id in emb_ids:
+        point_tracks.append(_safe(store.get_track, point_id) or {
+            "track_id": point_id,
+            "title": point_id,
+            "artist": "Unknown artist",
+            "album": "",
+            "artwork_url": None,
+            "preview_url": None,
+        })
 
     return {
         "points": {
             "ids": emb_ids,
             "x": [round(float(v), 4) for v in xy[:, 0]],
             "y": [round(float(v), 4) for v in xy[:, 1]],
+            "tracks": point_tracks,
         },
         "seed": seed,
         "recs": recs,

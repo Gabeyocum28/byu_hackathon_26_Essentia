@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import CoreGraphics
 import Testing
 @testable import Hackathon
 
@@ -50,5 +51,37 @@ struct InsightsInteractionTests {
 
         playback.seek(progress: 1.4)
         #expect(playback.progress == 1)
+    }
+
+    @Test func galaxyTransformAppliesZoomAndPanAroundViewCenter() {
+        let transform = PointTransform(
+            x: [-1, 1], y: [-1, 1], size: CGSize(width: 200, height: 100),
+            zoom: 2, pan: CGSize(width: 10, height: -5)
+        )
+
+        let center = transform.place(x: 0, y: 0)
+        let right = transform.place(x: 1, y: 0)
+
+        #expect(center.x == 110)
+        #expect(center.y == 45)
+        #expect(right.x == 178)
+        #expect(right.y == 45)
+    }
+
+    @Test func galaxyNearestPointSearchesWholeCorpusAndHonorsHitRadius() {
+        let transform = PointTransform(
+            x: [-1, 0, 1], y: [0, 0, 0],
+            size: CGSize(width: 220, height: 100)
+        )
+        let target = transform.place(x: 0, y: 0)
+
+        #expect(transform.nearestIndex(
+            to: CGPoint(x: target.x + 3, y: target.y),
+            x: [-1, 0, 1], y: [0, 0, 0], maximumDistance: 12
+        ) == 1)
+        #expect(transform.nearestIndex(
+            to: CGPoint(x: target.x + 30, y: target.y + 30),
+            x: [-1, 0, 1], y: [0, 0, 0], maximumDistance: 12
+        ) == nil)
     }
 }

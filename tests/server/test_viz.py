@@ -84,10 +84,21 @@ def test_viz_map_points_cover_corpus(client, seeded_corpus):
         "/viz/map", params={"track_id": tid, "axis": "sounds_like", "limit": 3}
     ).json()
     points = body["points"]
-    assert set(points) == {"ids", "x", "y"}
+    assert set(points) == {"ids", "x", "y", "tracks"}
     assert sorted(points["ids"]) == sorted(t["track_id"] for t in seeded_corpus)
     assert len(points["x"]) == len(points["y"]) == len(points["ids"])
     assert all(np.isfinite(points["x"])) and all(np.isfinite(points["y"]))
+
+
+def test_viz_map_point_metadata_stays_aligned_with_coordinates(client, seeded_corpus):
+    tid = seeded_corpus[0]["track_id"]
+    points = client.get(
+        "/viz/map", params={"track_id": tid, "axis": "sounds_like", "limit": 3}
+    ).json()["points"]
+
+    assert len(points["tracks"]) == len(points["ids"])
+    assert [track["track_id"] for track in points["tracks"]] == points["ids"]
+    assert all(track["title"] and track["artist"] for track in points["tracks"])
 
 
 def test_viz_map_seed_has_position_and_groove(client, seeded_corpus):

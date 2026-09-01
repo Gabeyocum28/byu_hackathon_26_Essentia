@@ -16,6 +16,7 @@ final class InsightsModel {
     let axis: Axis
     var map: VizMap?
     var selected: VizMap.Rec?
+    var focusedPoint: GalaxySelection?
     var isLoading = true
     var errorMessage: String?
 
@@ -34,6 +35,9 @@ final class InsightsModel {
             let map = try await api.vizMap(trackID: seed.trackID, axis: axis.id)
             self.map = map
             selected = map.recs.first
+            if let rec = map.recs.first {
+                focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
+            }
         } catch {
             errorMessage = "The math needs an analyzed corpus — is the server up?"
         }
@@ -43,7 +47,15 @@ final class InsightsModel {
     /// One intent keeps the visual selection and audible selection together.
     func selectAndPlay(_ rec: VizMap.Rec, play: (Track) -> Void) {
         selected = rec
+        focusedPoint = GalaxySelection(track: rec.track, x: rec.x, y: rec.y)
         play(rec.track)
+    }
+
+    func focus(_ point: GalaxySelection) {
+        focusedPoint = point
+        if let rec = map?.recs.first(where: { $0.trackID == point.id }) {
+            selected = rec
+        }
     }
 }
 
@@ -80,9 +92,17 @@ struct InsightsView: View {
                          + "sound space, flattened to 2D (PCA)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    GalaxyMapView(map: map, selected: $model.selected)
+                    GalaxyMapView(
+                        map: map,
+                        selectedTrackID: model.focusedPoint?.id,
+                        onSelect: model.focus
+                    )
                         .aspectRatio(1, contentMode: .fit)
                         .background(.black, in: .rect(cornerRadius: 12))
+                }
+
+                if let point = model.focusedPoint {
+                    galaxyCallout(point)
                 }
 
                 recPicker(map)
@@ -130,6 +150,36 @@ struct InsightsView: View {
                 }
             }
         }
+    }
+
+    private func galaxyCallout(_ point: GalaxySelection) -> some View {
+        Button {
+            model.focus(point)
+            playback.toggle(point.track)
+        } label: {
+            HStack(spacing: 12) {
+                Artwork(url: point.track.artworkURL)
+                    .frame(width: 54, height: 54)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(point.track.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(point.track.artist)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer()
+                Image(systemName: playback.nowPlayingID == point.id && playback.isPlaying
+                      ? "pause.fill" : "play.fill")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+            }
+            .padding(10)
+            .background(.thinMaterial, in: .rect(cornerRadius: 12))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Play \(point.track.title) by \(point.track.artist)")
     }
 }
 

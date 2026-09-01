@@ -2,45 +2,99 @@
 //  GalaxyMapView.swift
 //  Hackathon
 //
-//  The corpus as a starfield: every analyzed track is a dim dot placed by the
-//  server's 2D PCA of embedding space, the seed glows, and the current
-//  recommendations are lit and wired to the seed. Tap a lit dot to select it
-//  for the math panel.
+//  Interactive PCA starfield. Pinch and drag alter one screen-space
+//  PointTransform, which is also used for drawing, culling, and hit testing.
 //
 
 import SwiftUI
 
+struct GalaxySelection: Identifiable {
+    let track: Track
+    let x: Double
+    let y: Double
+
+    var id: String { track.trackID }
+}
+
 struct GalaxyMapView: View {
     let map: VizMap
-    @Binding var selected: VizMap.Rec?
+    let selectedTrackID: String?
+    let onSelect: (GalaxySelection) -> Void
+
+    @State private var zoom: CGFloat = 1
+    @State private var pan: CGSize = .zero
+    @GestureState private var gestureZoom: CGFloat = 1
+    @GestureState private var gesturePan: CGSize = .zero
+
+    private var activeZoom: CGFloat {
+        min(max(zoom * gestureZoom, 1), 8)
+    }
+
+    private var activePan: CGSize {
+        CGSize(width: pan.width + gesturePan.width,
+               height: pan.height + gesturePan.height)
+    }
 
     var body: some View {
         GeometryReader { proxy in
-            let transform = PointTransform(map: map, size: proxy.size)
+            let transform = PointTransform(
+                x: map.points.x, y: map.points.y, size: proxy.size,
+                zoom: activeZoom, pan: activePan
+            )
 
-            Canvas { context, _ in
-                draw(in: context, with: transform)
+            Canvas { context, size in
+                draw(in: context, size: size, with: transform)
             }
             .contentShape(Rectangle())
-            .onTapGesture { location in
-                select(nearest: location, transform: transform)
-            }
+            .simultaneousGesture(
+                SpatialTapGesture().onEnded { value in
+                    select(nearest: value.location, transform: transform)
+                }
+            )
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 6)
+                    .updating($gesturePan) { value, state, _ in
+                        state = value.translation
+                    }
+                    .onEnded { value in
+                        pan = CGSize(width: pan.width + value.translation.width,
+                                     height: pan.height + value.translation.height)
+                    }
+            )
+            .simultaneousGesture(
+                MagnifyGesture()
+                    .updating($gestureZoom) { value, state, _ in
+                        state = value.magnification
+                    }
+                    .onEnded { value in
+                        zoom = min(max(zoom * value.magnification, 1), 8)
+                    }
+            )
+            .accessibilityLabel("Music embedding galaxy")
+            .accessibilityHint("Pinch to zoom, drag to pan, or tap a star")
         }
     }
 
-    private func draw(in context: GraphicsContext, with transform: PointTransform) {
-        // Corpus starfield.
+    private func draw(in context: GraphicsContext, size: CGSize,
+                      with transform: PointTransform) {
+        // At high zoom most points are outside the viewport; never ask Canvas
+        // to rasterize them. The same transformed coordinate drives hit tests.
         for i in map.points.ids.indices {
             let p = transform.place(x: map.points.x[i], y: map.points.y[i])
+            guard transform.isVisible(p, in: size, margin: 10) else { continue }
+            if map.points.ids[i] == selectedTrackID {
+                context.fill(dot(at: p, radius: 7),
+                             with: .color(.white.opacity(0.22)))
+            }
             context.fill(dot(at: p, radius: 1.5),
                          with: .color(.white.opacity(0.55)))
         }
 
         let seedPoint = transform.place(x: map.seed.x, y: map.seed.y)
 
-        // Seed -> rec constellation lines, then the recs on top.
         for rec in map.recs {
             let p = transform.place(x: rec.x, y: rec.y)
+            guard transform.isVisible(p, in: size, margin: 20) else { continue }
             var line = Path()
             line.move(to: seedPoint)
             line.addLine(to: p)
@@ -49,7 +103,8 @@ struct GalaxyMapView: View {
         }
         for rec in map.recs {
             let p = transform.place(x: rec.x, y: rec.y)
-            if rec.trackID == selected?.trackID {
+            guard transform.isVisible(p, in: size, margin: 12) else { continue }
+            if rec.trackID == selectedTrackID {
                 context.fill(dot(at: p, radius: 11),
                              with: .color(.accentColor.opacity(0.25)))
                 context.fill(dot(at: p, radius: 7), with: .color(.accentColor))
@@ -58,10 +113,11 @@ struct GalaxyMapView: View {
             }
         }
 
-        // The glowing seed.
-        for (radius, opacity) in [(CGFloat(14), 0.15), (9, 0.35), (5.5, 1.0)] {
-            context.fill(dot(at: seedPoint, radius: radius),
-                         with: .color(.yellow.opacity(opacity)))
+        if transform.isVisible(seedPoint, in: size, margin: 16) {
+            for (radius, opacity) in [(CGFloat(14), 0.15), (9, 0.35), (5.5, 1.0)] {
+                context.fill(dot(at: seedPoint, radius: radius),
+                             with: .color(.yellow.opacity(opacity)))
+            }
         }
     }
 
@@ -71,38 +127,68 @@ struct GalaxyMapView: View {
     }
 
     private func select(nearest location: CGPoint, transform: PointTransform) {
-        func distanceSquared(_ rec: VizMap.Rec) -> CGFloat {
-            let p = transform.place(x: rec.x, y: rec.y)
-            return (p.x - location.x) * (p.x - location.x)
-                 + (p.y - location.y) * (p.y - location.y)
-        }
-        guard let hit = map.recs.min(by: { distanceSquared($0) < distanceSquared($1) }),
-              distanceSquared(hit) < 40 * 40 else { return }
-        selected = hit
+        guard let index = transform.nearestIndex(
+            to: location, x: map.points.x, y: map.points.y,
+            maximumDistance: 36
+        ), map.points.tracks.indices.contains(index) else { return }
+        onSelect(GalaxySelection(track: map.points.tracks[index],
+                                 x: map.points.x[index], y: map.points.y[index]))
     }
 }
 
-/// Maps PCA coordinates into view points with padding, preserving aspect.
-private struct PointTransform {
-    let scale: CGFloat
-    let offset: CGPoint
-    let center: CGPoint
+/// Maps PCA coordinates into screen points with padding, then applies the
+/// user's viewport around the view center. Internal so the math can be tested.
+struct PointTransform {
+    private let scale: CGFloat
+    private let dataCenter: CGPoint
+    private let viewCenter: CGPoint
+    private let zoom: CGFloat
+    private let pan: CGSize
 
-    init(map: VizMap, size: CGSize) {
-        let xs = map.points.x + [map.seed.x]
-        let ys = map.points.y + [map.seed.y]
-        let minX = xs.min() ?? 0, maxX = xs.max() ?? 1
-        let minY = ys.min() ?? 0, maxY = ys.max() ?? 1
+    init(x: [Double], y: [Double], size: CGSize,
+         zoom: CGFloat = 1, pan: CGSize = .zero) {
+        let minX = x.min() ?? 0, maxX = x.max() ?? 1
+        let minY = y.min() ?? 0, maxY = y.max() ?? 1
         let span = max(maxX - minX, maxY - minY, 1e-9)
         let padding: CGFloat = 16
         let fit = min(size.width, size.height) - 2 * padding
         scale = fit > 0 ? fit / span : 1
-        center = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
-        offset = CGPoint(x: size.width / 2, y: size.height / 2)
+        dataCenter = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+        viewCenter = CGPoint(x: size.width / 2, y: size.height / 2)
+        self.zoom = min(max(zoom, 1), 8)
+        self.pan = pan
     }
 
     func place(x: Double, y: Double) -> CGPoint {
-        CGPoint(x: offset.x + (x - center.x) * scale,
-                y: offset.y - (y - center.y) * scale)
+        let baseX = viewCenter.x + (x - dataCenter.x) * scale
+        let baseY = viewCenter.y - (y - dataCenter.y) * scale
+        return CGPoint(
+            x: viewCenter.x + (baseX - viewCenter.x) * zoom + pan.width,
+            y: viewCenter.y + (baseY - viewCenter.y) * zoom + pan.height
+        )
+    }
+
+    func nearestIndex(to location: CGPoint, x: [Double], y: [Double],
+                      maximumDistance: CGFloat) -> Int? {
+        let count = min(x.count, y.count)
+        var bestIndex: Int?
+        var bestDistance = maximumDistance * maximumDistance
+        for index in 0..<count {
+            let point = place(x: x[index], y: y[index])
+            let dx = point.x - location.x
+            let dy = point.y - location.y
+            let distance = dx * dx + dy * dy
+            if distance <= bestDistance {
+                bestDistance = distance
+                bestIndex = index
+            }
+        }
+        return bestIndex
+    }
+
+    func isVisible(_ point: CGPoint, in size: CGSize, margin: CGFloat) -> Bool {
+        CGRect(origin: .zero, size: size)
+            .insetBy(dx: -margin, dy: -margin)
+            .contains(point)
     }
 }
