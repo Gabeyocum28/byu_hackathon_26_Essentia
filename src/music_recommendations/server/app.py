@@ -25,7 +25,7 @@ from typing import NamedTuple
 from contract.features import AXES
 from music_recommendations.analysis import analyze_track
 from music_recommendations.analysis.schema import METRICS
-from music_recommendations.server import deezer, store
+from music_recommendations.server import deezer, store, viz
 from music_recommendations.server.axes import AXIS_FEATURES
 
 app = FastAPI(title="Essencia")
@@ -282,6 +282,98 @@ def recommend(track_id: str, axis: str,
                 break
 
     return {"seed_track_id": track_id, "axis": axis, "results": results}
+
+
+# ---- /viz/map — demo/debug, NOT part of contract/contract.md (like GET /) ----
+
+# The 2D projection of the embedding matrix, kept beside the matrix it was
+# computed from: recomputed only when _corpus_matrix hands back a new object
+# (corpus grew or was rebuilt), served from memory otherwise.
+_PROJECTION_CACHE: dict[str, tuple[np.ndarray, np.ndarray]] = {}
+
+
+def _projection(matrix: np.ndarray) -> np.ndarray:
+    cached = _PROJECTION_CACHE.get("embedding")
+    if cached is not None and cached[0] is matrix:
+        return cached[1]
+    xy = viz.project_2d(matrix)
+    _PROJECTION_CACHE["embedding"] = (matrix, xy)
+    return xy
+
+
+@app.get("/viz/map")
+def viz_map(track_id: str, axis: str,
+            limit: int = Query(10, ge=1, le=50)) -> dict:
+    """Everything the wow screen needs in one payload: the whole corpus as 2D
+    points, the seed, and the recs with the actual numbers behind each score."""
+    if axis not in AXIS_FEATURES:
+        raise HTTPException(400, f"unknown axis {axis!r}")
+
+    feature_key, direction = AXIS_FEATURES[axis]
+    seed_features = _safe(store.get_features, track_id)
+    corpus = tuple(_safe(store.corpus_ids, default=[]))
+    if seed_features is None or not corpus:
+        raise HTTPException(404, f"track {track_id} not analyzed")
+
+    # The map is always embedding space, whatever the axis scores with.
+    emb_ids, emb_matrix, _ = _corpus_matrix(corpus, "embedding", "cosine",
+                                            want_correction=False)
+    if track_id not in emb_ids:
+        raise HTTPException(404, f"track {track_id} not in corpus")
+    xy = _projection(emb_matrix)
+    position = {tid: i for i, tid in enumerate(emb_ids)}
+
+    from music_recommendations.server import rank as rank_mod
+
+    metric = METRICS.get(feature_key, "cosine")
+    ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
+                                             want_correction=direction == -1)
+    seed_vec = _vector(seed_features, feature_key)
+    order = rank_mod.rank(seed_vec, matrix, direction=direction,
+                          limit=limit + 1, metric=metric, correction=correction)
+    similarity = rank_mod.scores(seed_vec, matrix, metric)
+
+    recs = []
+    for idx in order:
+        rec_id = ids[idx]
+        if rec_id == track_id or rec_id not in position:
+            continue
+        track = _safe(store.get_track, rec_id)
+        features = _safe(store.get_features, rec_id, default={})
+        pos = position[rec_id]
+        recs.append({
+            **(track or {"track_id": rec_id}),
+            "score": float(similarity[idx]),
+            "x": float(xy[pos, 0]),
+            "y": float(xy[pos, 1]),
+            "groove": (features or {}).get("groove"),
+            "math": viz.score_math(
+                seed_vec, matrix[idx], metric,
+                float(correction[idx]) if correction is not None else None,
+            ),
+        })
+        if len(recs) == limit:
+            break
+
+    seed_track = _safe(store.get_track, track_id) or {"track_id": track_id}
+    seed_pos = position[track_id]
+    seed = {
+        **seed_track,
+        "x": float(xy[seed_pos, 0]),
+        "y": float(xy[seed_pos, 1]),
+        "groove": seed_features.get("groove"),
+    }
+
+    return {
+        "points": {
+            "ids": emb_ids,
+            "x": [round(float(v), 4) for v in xy[:, 0]],
+            "y": [round(float(v), 4) for v in xy[:, 1]],
+        },
+        "seed": seed,
+        "recs": recs,
+        "axis": {"id": axis, "metric": metric, "direction": direction},
+    }
 
 
 def _fixture_fallback(track_id: str, limit: int) -> list[dict]:
