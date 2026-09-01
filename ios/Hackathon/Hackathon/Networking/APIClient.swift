@@ -87,6 +87,10 @@ actor APIClient {
     }
 
     private func send<T: Decodable>(_ request: URLRequest, as type: T.Type) async throws -> T {
+        var request = request
+        for (field, value) in AppConfig.extraHeaders {
+            request.setValue(value, forHTTPHeaderField: field)
+        }
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw APIError.invalidResponse }
         guard (200..<300).contains(http.statusCode) else { throw APIError.status(http.statusCode) }
