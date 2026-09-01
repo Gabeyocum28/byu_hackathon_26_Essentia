@@ -51,8 +51,10 @@ def clear_matrix_cache():
     from music_recommendations.server import app
 
     app._MATRIX_CACHE.clear()
+    app._PROJECTION_CACHE.clear()
     yield
     app._MATRIX_CACHE.clear()
+    app._PROJECTION_CACHE.clear()
 
 
 @pytest.fixture
