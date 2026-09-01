@@ -28,6 +28,10 @@ def main() -> None:
                         help="crawl the artist-relatedness graph instead of charts")
     parser.add_argument("--hops", type=int, default=2)
     parser.add_argument("--per-genre", type=int, default=100)
+    parser.add_argument("--expand", type=int, default=0, metavar="N",
+                        help="after charting, snowball 1 hop off N of the "
+                             "artists found — the cheap way to go from ~1.7k "
+                             "candidates to tens of thousands")
     parser.add_argument("--out", type=Path, default=OUT)
     args = parser.parse_args()
 
@@ -37,6 +41,21 @@ def main() -> None:
     else:
         print(f"crawling {len(crawl.GENRES)} genre charts...")
         tracks = crawl.from_charts(per_genre=args.per_genre)
+
+    if args.expand:
+        # Charts are broad but shallow — ~100 tracks per genre and no depth.
+        # One hop of /related off the artists they surfaced multiplies that,
+        # while staying anchored to a genuinely genre-spread starting set.
+        seeds = list(dict.fromkeys(t["artist"] for t in tracks))[: args.expand]
+        print(f"expanding 1 hop from {len(seeds)} chart artists "
+              f"(~{len(seeds) * 2} API calls, be patient)...")
+        before = len(tracks)
+        seen = {t["track_id"] for t in tracks}
+        for track in crawl.snowball(root_names=seeds, hops=1, per_artist=20):
+            if track["track_id"] not in seen:
+                seen.add(track["track_id"])
+                tracks.append(track)
+        print(f"  +{len(tracks) - before} tracks from the expansion")
 
     if not tracks:
         sys.exit("no candidates found — Deezer may be rate limiting; try again")

@@ -3,7 +3,8 @@
 //  Hackathon
 //
 //  The recommendation list for a (seed, axis) pair. Each row plays its 30s
-//  preview through the shared PlaybackController.
+//  preview through the shared PlaybackController, which keeps playing in the
+//  bar after you navigate away.
 //
 
 import SwiftUI
@@ -39,7 +40,6 @@ final class RecommendationsModel {
 }
 
 struct RecommendationsView: View {
-    @Environment(PlaybackController.self) private var playback
     @State private var model: RecommendationsModel
 
     init(seed: Track, axis: Axis) {
@@ -64,31 +64,18 @@ struct RecommendationsView: View {
         .navigationTitle(model.axis.label)
         .navigationBarTitleDisplayMode(.inline)
         .task { await model.load() }
-        .onDisappear { playback.stop() }
     }
 }
 
 /// A track row with a play/pause control driving the shared player.
 private struct PlayableTrackRow: View {
-    @Environment(PlaybackController.self) private var playback
     let track: Track
 
-    private var isPlaying: Bool { playback.nowPlayingID == track.id }
-
     var body: some View {
-        Button {
-            playback.toggle(track)
-        } label: {
-            HStack {
-                TrackRow(track: track)
-                Spacer()
-                Image(systemName: isPlaying ? "pause.circle.fill" : "play.circle")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-            }
-            .contentShape(.rect)
+        HStack {
+            TrackRow(track: track)
+            Spacer(minLength: 0)
+            PlayButton(track: track)
         }
-        .buttonStyle(.plain)
-        .disabled(track.previewURL == nil)
     }
 }
