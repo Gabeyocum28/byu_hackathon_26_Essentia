@@ -40,3 +40,34 @@ def test_payload_writes_store_key_layout():
     assert json.dumps(TRACK).encode() in blob
     assert json.dumps(FEATURES).encode() in blob
     assert len(commands) == 4  # leading split artifact + SET, SET, SADD
+
+
+def test_default_workers_is_75_percent_of_cores():
+    assert push.default_workers(cores=8) == 6
+    assert push.default_workers(cores=4) == 3
+    assert push.default_workers(cores=1) == 1   # never zero
+
+
+def test_chart_tracks_maps_and_dedupes(monkeypatch):
+    chart_item = {
+        "id": 7, "title": "Song", "artist": {"name": "A"},
+        "album": {"title": "Al", "cover_medium": "http://x/c.jpg"},
+        "preview": "http://x/p.mp3",
+    }
+    no_preview = dict(chart_item, id=8, preview="")
+    def fake(url):
+        if url.endswith("/genre"):
+            return {"data": [{"id": 0, "name": "All"}, {"id": 132, "name": "Pop"}]}
+        return {"data": [chart_item, no_preview]}
+    monkeypatch.setattr(push, "_get_json", fake)
+    tracks = push.chart_tracks(skip_ids={"9"})
+    assert [t["track_id"] for t in tracks] == ["7"]   # dedup across genres, no-preview and skip filtered
+    assert tracks[0]["artist"] == "A"
+
+
+def test_chart_tracks_skips_existing_corpus_ids(monkeypatch):
+    item = {"id": 7, "title": "S", "artist": {"name": "A"},
+            "album": {"title": "Al", "cover_medium": "u"}, "preview": "p"}
+    monkeypatch.setattr(push, "_get_json", lambda url:
+        {"data": [{"id": 0, "name": "All"}]} if url.endswith("/genre") else {"data": [item]})
+    assert push.chart_tracks(skip_ids={"7"}) == []

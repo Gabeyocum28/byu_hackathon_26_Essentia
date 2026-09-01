@@ -8,6 +8,8 @@ Key layout mirrors server/store.py exactly.
 Usage:
   python3 scripts/push_tracks.py 3135556 916424 ...
   python3 scripts/push_tracks.py --ids-from tracklist.txt   # one id per line
+  python3 scripts/push_tracks.py --charts                   # every Deezer genre chart
+  python3 scripts/push_tracks.py --charts --workers 6       # default: 75% of cores
 
 Config (env):
   ESSENCIA_SSH_HOST  default opc@163.192.48.114
@@ -31,6 +33,76 @@ sys.path.insert(0, str(Path(__file__).parents[1]))
 SSH_HOST = os.environ.get("ESSENCIA_SSH_HOST", "opc@163.192.48.114")
 SSH_KEY = os.environ.get("ESSENCIA_SSH_KEY", "")
 CONTAINER = os.environ.get("ESSENCIA_CONTAINER", "hackathon")
+
+
+def default_workers(cores: int | None = None) -> int:
+    cores = cores or os.cpu_count() or 1
+    return max(1, int(cores * 0.75))
+
+
+def _get_json(url: str) -> dict:
+    with urllib.request.urlopen(url, timeout=15) as r:
+        return json.load(r)
+
+
+def chart_tracks(skip_ids: set[str]) -> list[dict]:
+    """Contract-shaped tracks from every Deezer genre chart, deduped."""
+    from music_recommendations.server.deezer import API, _to_track
+
+    genres = _get_json(f"{API}/genre")["data"]
+    seen: dict[str, dict] = {}
+    for g in genres:
+        try:
+            items = _get_json(f"{API}/chart/{g['id']}/tracks?limit=100")["data"]
+        except Exception:
+            continue  # some genres have no chart; skip, don't die
+        for item in items:
+            tid = str(item["id"])
+            if item.get("preview") and tid not in skip_ids and tid not in seen:
+                seen[tid] = _to_track(item)
+    return list(seen.values())
+
+
+def corpus_ids_on_vm() -> set[str]:
+    ssh = ["ssh"] + (["-i", SSH_KEY] if SSH_KEY else []) + [SSH_HOST]
+    cmd = ssh + ["sudo", "docker", "exec", CONTAINER,
+                 "redis-cli", "smembers", "corpus:ids"]
+    out = subprocess.run(cmd, capture_output=True, timeout=30, text=True)
+    return set(out.stdout.split()) if out.returncode == 0 else set()
+
+
+def _process_track(track: dict) -> tuple[str, str]:
+    """Worker: analyze one track and push it. Returns (track_id, error or '')."""
+    try:
+        push(payload(track, analyze(track)))
+        return track["track_id"], ""
+    except Exception as exc:
+        return track["track_id"], str(exc)[:200]
+
+
+def run_parallel(tracks: list[dict], workers: int) -> list[str]:
+    """Analyze+push tracks across worker processes; returns failed ids."""
+    import multiprocessing as mp
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    failures = []
+    start = time.time()
+    # spawn, not fork: forking after TensorFlow has loaded wedges on macOS
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=mp.get_context("spawn")
+    ) as pool:
+        futures = {pool.submit(_process_track, t): t for t in tracks}
+        for n, fut in enumerate(as_completed(futures), 1):
+            tid, err = fut.result()
+            t = futures[fut]
+            rate = n / (time.time() - start) * 60
+            if err:
+                failures.append(tid)
+                print(f"[{n}/{len(tracks)}] {tid}: FAILED — {err}")
+            else:
+                print(f"[{n}/{len(tracks)}] {tid}: {t['artist']} — "
+                      f"{t['title'][:35]} ({rate:.0f}/min)")
+    return failures
 
 
 def resp(command: list[str]) -> bytes:
@@ -80,6 +152,25 @@ def main() -> None:
     from music_recommendations.server import deezer
 
     args = sys.argv[1:]
+    workers = 0
+    if "--workers" in args:
+        i = args.index("--workers")
+        workers = int(args[i + 1])
+        del args[i:i + 2]
+
+    if args[:1] == ["--charts"]:
+        existing = corpus_ids_on_vm()
+        tracks = chart_tracks(skip_ids=existing)
+        workers = workers or default_workers()
+        print(f"{len(tracks)} chart tracks to push "
+              f"({len(existing)} already in corpus); {workers} workers")
+        failures = run_parallel(tracks, workers)
+        print(f"\ndone: {len(tracks) - len(failures)} pushed, {len(failures)} failed")
+        if failures:
+            print("retry with: python3 scripts/push_tracks.py", *failures)
+            sys.exit(1)
+        return
+
     if args[:1] == ["--ids-from"]:
         ids = Path(args[1]).read_text().split()
     else:
