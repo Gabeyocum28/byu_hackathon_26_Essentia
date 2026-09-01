@@ -108,6 +108,12 @@ struct TourView: View {
     @State private var pausedElapsed: Double = 0
     @State private var playStartDate: Date = .now
     @State private var buffer: TourProjectionBuffer?
+    /// Max L2 norm across the corpus's 8-d coords, computed once. PCA scores
+    /// are zero-mean, and projection through an orthonormal frame can never
+    /// exceed the original vector's norm, so this bounds every possible
+    /// rotation's projected extent — the transform built from it never needs
+    /// to change as the frame rotates.
+    @State private var maxRadius: Double = 1
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -132,6 +138,14 @@ struct TourView: View {
     private func ensureBuffer() {
         guard let tour, buffer == nil || buffer?.x.count != tour.coords.count else { return }
         buffer = TourProjectionBuffer(count: tour.coords.count)
+        maxRadius = Self.maxRadius(of: tour.coords)
+    }
+
+    private static func maxRadius(of coords: [[Float]]) -> Double {
+        let radius = coords.map { row -> Double in
+            sqrt(row.reduce(0.0) { $0 + Double($1) * Double($1) })
+        }.max() ?? 1
+        return radius > 0 ? radius : 1
     }
 
     private func canvas(_ tour: VizTour) -> some View {
@@ -159,7 +173,9 @@ struct TourView: View {
             buffer.x[i] = x
             buffer.y[i] = y
         }
-        let transform = PointTransform(x: buffer.x, y: buffer.y, size: size)
+        // Fixed radius, not the current frame's bounding box: keeps scale and
+        // center stable across rotation instead of "breathing" every frame.
+        let transform = PointTransform(radius: maxRadius, size: size)
         for i in buffer.x.indices {
             let p = transform.place(x: buffer.x[i], y: buffer.y[i])
             guard transform.isVisible(p, in: size, margin: 6) else { continue }
