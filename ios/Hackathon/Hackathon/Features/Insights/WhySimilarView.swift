@@ -62,12 +62,15 @@ struct WhySimilarView: View {
                     .font(.system(.caption, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
-            HStack(alignment: .bottom, spacing: 4) {
+            HStack(alignment: .bottom, spacing: 3) {
                 ForEach(bands) { band in
                     Button { onSolo(band) } label: {
                         bar(band, peak: peak)
                     }
                     .buttonStyle(.plain)
+                    // Ten bands share whatever width there is, so the row
+                    // fits every screen instead of running off the card.
+                    .frame(maxWidth: .infinity)
                     .accessibilityLabel(
                         "\(Int(band.loHz)) to \(Int(band.hiHz)) hertz, "
                         + "similarity drops \(String(format: "%.3f", band.delta))"

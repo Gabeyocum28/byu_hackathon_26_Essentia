@@ -43,13 +43,10 @@ struct EigenListeningView: View {
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
-                HStack(alignment: .center, spacing: 14) {
-                    trackStack(extremes.low)
-                    Image(systemName: "arrow.left.and.right")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    trackStack(extremes.high)
-                }
+                // Two stacked rows, not one wide one: eight 42pt artworks
+                // side by side need ~500pt and ran off every iPhone.
+                end(label: "low", tracks: extremes.low)
+                end(label: "high", tracks: extremes.high)
             }
             .padding(10)
             .background(.quaternary.opacity(0.35), in: .rect(cornerRadius: 10))
@@ -68,15 +65,26 @@ struct EigenListeningView: View {
         }
     }
 
-    private func trackStack(_ tracks: [VizExtremesResponse.ExtremeTrack]) -> some View {
-        HStack(spacing: 6) {
-            ForEach(tracks) { extreme in
-                Button { onPlay(extreme.track) } label: {
-                    Artwork(url: extreme.track.artworkURL)
-                        .frame(width: 42, height: 42)
+    /// One end of a component: a label and its tracks, scrollable so a
+    /// long rail never pushes the card wider than the screen.
+    private func end(label: String, tracks: [VizExtremesResponse.ExtremeTrack]) -> some View {
+        HStack(spacing: 8) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 30, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(tracks) { extreme in
+                        Button { onPlay(extreme.track) } label: {
+                            Artwork(url: extreme.track.artworkURL)
+                                .frame(width: 42, height: 42)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel("Play \(extreme.title) by \(extreme.artist)")
+                    }
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Play \(extreme.title) by \(extreme.artist)")
+                .padding(.vertical, 1)
             }
         }
     }

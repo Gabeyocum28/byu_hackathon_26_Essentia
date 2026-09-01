@@ -28,10 +28,11 @@ struct InsightsInteractionTests {
     )
 
     /// The screen loads a second map on the "surprise" axis so the Proof
-    /// tab's hubness toggle has something to compare. Letting that map lead
-    /// everywhere replaced the axis the user actually chose — the galaxy and
-    /// rec strip showed surprise picks after asking for "sounds like".
-    @Test func onlyProofModeFollowsTheSurpriseComparisonMap() {
+    /// tab's hubness toggle has something to compare. That map must stay
+    /// inside its own section: letting it lead replaced the axis the user
+    /// actually chose, and Proof showed songs unlike the seed with no
+    /// explanation.
+    @Test func everyModeShowsTheChosenAxisNotTheSurpriseComparison() {
         let model = InsightsModel(
             seed: seed,
             axis: Axis(id: "sounds_like", label: "Sounds like this")
@@ -39,16 +40,14 @@ struct InsightsInteractionTests {
         model.map = Self.map(recTrackID: "chosen", axisID: "sounds_like")
         model.proofMap = Self.map(recTrackID: "surprise", axisID: "surprise")
 
-        model.activate(.galaxy)
-        #expect(model.displayMap?.recs.first?.trackID == "chosen")
-        #expect(model.selected?.trackID == "chosen")
+        for mode in InsightMode.allCases {
+            model.activate(mode)
+            #expect(model.displayMap?.recs.first?.trackID == "chosen")
+            #expect(model.selected?.trackID == "chosen")
+        }
 
-        model.activate(.sound)
-        #expect(model.displayMap?.recs.first?.trackID == "chosen")
-
-        model.activate(.proof)
-        #expect(model.displayMap?.recs.first?.trackID == "surprise")
-        #expect(model.selected?.trackID == "surprise")
+        // The comparison is still available for the toggle's own list.
+        #expect(model.proofMap?.recs.first?.trackID == "surprise")
     }
 
     private static func map(recTrackID: String, axisID: String) -> VizMap {
