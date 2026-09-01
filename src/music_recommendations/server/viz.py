@@ -288,20 +288,20 @@ def _periodic_hann(size: int) -> np.ndarray:
 
 def _stop_gain(freqs: np.ndarray, lo_hz: float, hi_hz: float,
                taper_bins: int) -> np.ndarray:
-    """1 outside [lo, hi], 0 inside, raised-cosine across the edges — a brick
-    wall is a sinc in time and rings audibly (Gibbs).
+    """1 outside [lo, hi], 0 inside, raised-cosine across `taper_bins` at each
+    edge — a brick wall is a sinc in time and rings audibly (Gibbs).
 
-    The taper is capped at a quarter of the band's own width: the low bands
-    of a log-spaced split are only a few bins wide, and a fixed-width taper
-    there would spill across their neighbours until adjacent bands became
-    the same filter — and their attributions indistinguishable.
+    Deliberately NOT width-adaptive: this mask has to stay the exact
+    complement of the band-solo mask on the phone, which tapers a fixed
+    number of bins. A band too narrow for its taper is a resolution problem,
+    and the caller fixes it by analyzing with a longer window (see the
+    worker's 8192-point call), not by quietly using a different filter here.
     """
     gain = np.ones_like(freqs)
     inside = np.nonzero((freqs >= lo_hz) & (freqs <= hi_hz))[0]
     if inside.size == 0:
         return gain
     gain[inside] = 0.0
-    taper_bins = max(1, min(taper_bins, inside.size // 4))
     first, last = int(inside[0]), int(inside[-1])
     for step in range(1, taper_bins + 1):
         ramp = 0.5 * (1 - np.cos(np.pi * step / (taper_bins + 1)))

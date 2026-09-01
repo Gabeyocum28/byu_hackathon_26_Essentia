@@ -253,3 +253,60 @@ def test_attribution_measures_against_an_identically_processed_reference(
     # base still reports the stored-embedding cosine, so the number on
     # screen matches the score the rest of the app shows.
     assert store.get_attribution("42", "43")["base"] == pytest.approx(1.0)
+
+
+def test_attribution_analyzes_at_the_long_window(fake_redis, embedding_stub,
+                                                 monkeypatch):
+    """The window is the fix for low-band resolution, so it is pinned here:
+    falling back to band_stop's defaults would make neighbouring low bands
+    measure the same thing again."""
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+
+    seen = []
+    original = worker.viz.band_stop
+
+    def spy(audio, sample_rate, lo_hz, hi_hz, **kwargs):
+        seen.append(kwargs)
+        return original(audio, sample_rate, lo_hz, hi_hz, **kwargs)
+
+    monkeypatch.setattr(worker.viz, "band_stop", spy)
+    assert worker.process_attribution("42", "43") is True
+
+    assert len(seen) == 10
+    assert all(k == {"fft_size": 8192, "hop": 4096} for k in seen)
+
+
+def test_attribution_never_clips_a_hot_counterfactual(fake_redis, embedding_stub,
+                                                      monkeypatch):
+    """Deleting a band that opposed a peak can push the residual above full
+    scale. One shared gain keeps every counterfactual inside the rails —
+    a clipped sample is broadband distortion charged to that band."""
+    import numpy as np
+    import wave as wave_mod
+
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+    # A hot master: peaks already at full scale before anything is removed.
+    t = np.arange(16000) / 16000.0
+    hot = np.sin(2 * np.pi * 200 * t) + np.sin(2 * np.pi * 4000 * t)
+    hot = hot / np.abs(hot).max()
+    monkeypatch.setattr(embedding_stub, "load_audio", staticmethod(lambda p: hot))
+
+    peaks = []
+    original = worker._write_wav
+
+    def spy(samples, sample_rate):
+        path = original(samples, sample_rate)
+        with wave_mod.open(str(path), "rb") as src:
+            raw = src.readframes(src.getnframes())
+        peaks.append(np.abs(np.frombuffer(raw, dtype="<i2")).max())
+        return path
+
+    monkeypatch.setattr(worker, "_write_wav", spy)
+    assert worker.process_attribution("42", "43") is True
+
+    assert len(peaks) == 11
+    assert max(peaks) < 32767          # nothing pinned to the rail

@@ -631,28 +631,41 @@ def test_viz_attribute_404_when_a_track_is_unanalyzed(client, seeded_corpus):
     assert client.get("/viz/attribute", params={"seed": "nope", "rec": tid}).status_code == 404
 
 
-def test_adjacent_low_bands_stay_separable():
-    """The lowest log-spaced bands are only a few bins wide. With a fixed
-    taper they blur into one filter and their attributions become
-    indistinguishable — the tone in band 1 must survive band 2's removal."""
+def test_neighbouring_low_bands_bleed_at_the_default_window():
+    """Why the worker analyzes at 8192. With the default 2048-point window
+    the bins are 7.8 Hz and the taper spills past the narrow low bands, so
+    stopping band 2 also eats a third of a tone that lives in band 1 — the
+    two bands measure overlapping things. This pins the behaviour the worker
+    is overriding; if it ever silently fell back, this is what it would get.
+    """
+    audio = _tone(80.0)                       # in band 1, not band 2
+    neighbour = viz.band_stop(audio, 16000, *viz.band_edges()[1])
+
+    assert _energy_at(neighbour, 80.0) < _energy_at(audio, 80.0) * 0.7
+
+
+def test_adjacent_low_bands_stay_separable_at_the_attribution_window():
+    """At the window the worker actually uses, band 1 removes its own tone
+    and band 2 leaves it alone — the bands measure different things."""
     bands = viz.band_edges()
-    audio = _tone(80.0)          # inside band 1 (60-98 Hz), not band 2
+    audio = _tone(80.0)
 
     stopped = viz.band_stop(audio, 16000, *bands[0], fft_size=8192, hop=4096)
     untouched = viz.band_stop(audio, 16000, *bands[1], fft_size=8192, hop=4096)
 
     before = _energy_at(audio, 80.0)
-    assert _energy_at(stopped, 80.0) < before / 50
-    assert _energy_at(untouched, 80.0) > before / 2
+    assert _energy_at(stopped, 80.0) < before / 100
+    assert _energy_at(untouched, 80.0) > before * 0.95
 
 
-def test_stop_gain_taper_never_outgrows_the_band_it_softens():
+def test_stop_mask_taper_width_does_not_depend_on_band_width():
+    """The phone solos a band by keeping exactly what this mask removes, so
+    the two must mirror each other bin for bin — including in the tapers. A
+    width-adaptive taper here would silently break that pairing."""
     freqs = np.fft.rfftfreq(8192, 1.0 / 16000)
-    lo, hi = viz.band_edges()[0]
 
-    gain = viz._stop_gain(freqs, lo, hi, taper_bins=4)
+    wide = viz._stop_gain(freqs, *viz.band_edges()[-1], taper_bins=4)
+    narrow = viz._stop_gain(freqs, *viz.band_edges(count=40)[0], taper_bins=4)
 
-    stopped = np.count_nonzero(gain == 0.0)
-    tapered = np.count_nonzero((gain > 0.0) & (gain < 1.0))
-    assert stopped > 0
-    assert tapered <= stopped
+    assert np.count_nonzero((wide > 0) & (wide < 1)) == 8
+    assert np.count_nonzero((narrow > 0) & (narrow < 1)) == 8
