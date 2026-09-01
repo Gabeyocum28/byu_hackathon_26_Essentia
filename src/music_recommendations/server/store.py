@@ -61,3 +61,42 @@ def get_many_features(track_ids: list[str]) -> list[dict | None]:
         return []
     raw = client().mget([f"features:{t}" for t in track_ids])
     return [json.loads(r) if r else None for r in raw]
+
+
+# ---- embed work queue (internal; not part of the HTTP contract) ----
+#   embed:queue        -> list of track ids awaiting analysis (LPUSH/BRPOP)
+#   embed:queued       -> set guarding against duplicate enqueues
+#   embed:queued:{id}  -> TTL companion: a set member can't expire on its
+#                         own, so a crashed worker blocks re-enqueue for at
+#                         most this long.
+
+_QUEUED_TTL_S = 300
+
+
+def put_track_meta(track: dict) -> None:
+    """Write a track's contract fields only — no features, no corpus entry."""
+    client().set(f"track:{track['track_id']}", json.dumps(track))
+
+
+def enqueue_embed(track_id: str) -> bool:
+    """Queue a track for the embed worker. False if already queued."""
+    r = client()
+    if r.sismember("embed:queued", track_id) and r.exists(f"embed:queued:{track_id}"):
+        return False
+    r.sadd("embed:queued", track_id)
+    r.set(f"embed:queued:{track_id}", "1", ex=_QUEUED_TTL_S)
+    r.lpush("embed:queue", track_id)
+    return True
+
+
+def dequeue_embed(timeout: int = 5) -> str | None:
+    """Block up to `timeout` seconds for the next queued track id."""
+    popped = client().brpop("embed:queue", timeout=timeout)
+    return popped[1] if popped else None
+
+
+def clear_embed_marker(track_id: str) -> None:
+    """Drop the dedup guard so the track can be enqueued again."""
+    r = client()
+    r.srem("embed:queued", track_id)
+    r.delete(f"embed:queued:{track_id}")

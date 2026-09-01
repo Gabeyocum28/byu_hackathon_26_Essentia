@@ -8,8 +8,9 @@ class FakeRedis:
     def __init__(self):
         self.kv = {}
         self.sets = {}
+        self.lists = {}
 
-    def set(self, key, value):
+    def set(self, key, value, ex=None):
         self.kv[key] = value
 
     def get(self, key):
@@ -18,11 +19,30 @@ class FakeRedis:
     def mget(self, keys):
         return [self.kv.get(k) for k in keys]
 
+    def exists(self, key):
+        return 1 if key in self.kv else 0
+
+    def delete(self, key):
+        self.kv.pop(key, None)
+
     def sadd(self, key, *values):
         self.sets.setdefault(key, set()).update(values)
 
+    def srem(self, key, *values):
+        self.sets.get(key, set()).difference_update(values)
+
+    def sismember(self, key, value):
+        return value in self.sets.get(key, set())
+
     def smembers(self, key):
         return self.sets.get(key, set())
+
+    def lpush(self, key, *values):
+        self.lists.setdefault(key, []).extend(values)
+
+    def brpop(self, key, timeout=0):
+        items = self.lists.get(key)
+        return (key, items.pop(0)) if items else None
 
 
 @pytest.fixture(autouse=True)
