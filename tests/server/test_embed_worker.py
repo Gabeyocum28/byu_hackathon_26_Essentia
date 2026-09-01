@@ -62,3 +62,22 @@ def test_process_job_failure_logs_clears_marker_never_raises(fake_redis, monkeyp
 def test_process_job_no_metadata_anywhere_fails_cleanly(fake_redis, monkeypatch):
     monkeypatch.setattr(worker.deezer, "get_track", lambda t: None)
     assert worker.process_job("42") is False
+
+
+def test_tick_survives_a_dequeue_connection_error(monkeypatch):
+    """A transient Redis error on the blocking pop must not kill the loop."""
+    calls = {"n": 0}
+
+    def flaky_dequeue(timeout=5):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ConnectionError("connection refused")
+        return None
+
+    monkeypatch.setattr(worker.store, "dequeue_embed", flaky_dequeue)
+    monkeypatch.setattr(worker.time, "sleep", lambda s: None)
+
+    worker._tick()  # first call: dequeue raises, caught and swallowed
+    assert calls["n"] == 1
+    worker._tick()  # second call: process continues normally
+    assert calls["n"] == 2

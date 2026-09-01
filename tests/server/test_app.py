@@ -174,6 +174,25 @@ def test_seed_redis_down_degrades_to_ready(client, monkeypatch):
     assert body == {"track_id": tid, "status": "ready"}
 
 
+def test_seed_download_failure_queues_instead_of_500(client, fake_redis, monkeypatch):
+    """A Deezer preview fetch failure (timeout, flake) must queue for the
+    embed worker like a missing-essentia host does, not 500."""
+    def boom(url):
+        raise OSError("preview fetch failed")
+
+    tid = FIXTURE[0]["track_id"]
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(FIXTURE[0]))
+    monkeypatch.setattr(app_module, "_download_preview", boom)
+    monkeypatch.setattr(app_module, "_EMBED_WAIT_S", 0.0)
+    monkeypatch.setattr(app_module, "_EMBED_POLL_S", 0.0)
+
+    body = client.post("/seed", json={"track_id": tid})
+    assert body.status_code == 200
+    assert body.json() == {"track_id": tid, "status": "unanalyzed"}
+    assert fake_redis.lists["embed:queue"] == [tid]
+    assert tid not in store.corpus_ids()
+
+
 def test_seed_unknown_track_404(client, fake_redis, monkeypatch):
     monkeypatch.setattr(app_module.deezer, "get_track", lambda t: None)
     assert client.post("/seed", json={"track_id": "doesnotexist"}).status_code == 404

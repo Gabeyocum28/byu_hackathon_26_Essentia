@@ -79,7 +79,12 @@ def put_track_meta(track: dict) -> None:
 
 
 def enqueue_embed(track_id: str) -> bool:
-    """Queue a track for the embed worker. False if already queued."""
+    """Queue a track for the embed worker. False if already queued.
+
+    The guard-then-push below isn't atomic: two concurrent callers can both
+    pass the check and both LPUSH. Harmless -- the worker's writes are
+    idempotent, so a track processed twice just costs an extra analysis.
+    """
     r = client()
     if r.sismember("embed:queued", track_id) and r.exists(f"embed:queued:{track_id}"):
         return False

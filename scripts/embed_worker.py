@@ -11,7 +11,9 @@ One process, one job at a time: on-demand taps trickle in and analysis is
 """
 from __future__ import annotations
 
+import os
 import tempfile
+import time
 import urllib.request
 from pathlib import Path
 
@@ -20,7 +22,9 @@ from music_recommendations.server import deezer, store
 
 
 def download_preview(url: str) -> Path:
-    path = Path(tempfile.mkstemp(suffix=".mp3")[1])
+    fd, name = tempfile.mkstemp(suffix=".mp3")
+    os.close(fd)
+    path = Path(name)
     with urllib.request.urlopen(url, timeout=10) as resp:
         path.write_bytes(resp.read())
     return path
@@ -60,12 +64,26 @@ def process_job(track_id: str) -> bool:
             pass
 
 
-def main() -> None:
-    print("[embed_worker] watching embed:queue (Ctrl-C to stop)", flush=True)
-    while True:
+def _tick() -> None:
+    """One loop iteration: dequeue and process a job, if there is one.
+
+    process_job never raises, but store.dequeue_embed can (a transient Redis
+    ConnectionError on the blocking pop) -- guard it here so main()'s loop
+    survives a Redis blip instead of dying.
+    """
+    try:
         track_id = store.dequeue_embed(timeout=5)
         if track_id:
             process_job(track_id)
+    except Exception as exc:
+        print(f"[embed_worker] queue error {exc}, retrying in 5s", flush=True)
+        time.sleep(5)
+
+
+def main() -> None:
+    print("[embed_worker] watching embed:queue (Ctrl-C to stop)", flush=True)
+    while True:
+        _tick()
 
 
 if __name__ == "__main__":

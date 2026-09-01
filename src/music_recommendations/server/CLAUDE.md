@@ -12,4 +12,6 @@ Rules:
   FAISS/pgvector/ANN — pure overhead at this scale (spec §2.2).
 - The axis registry in axes.py is the one table for adding/removing/
   reweighting axes.
-- POST /seed is synchronous and blocking. No polling state machine.
+- POST /seed is one blocking HTTP request -- no polling state machine in the
+  contract. Internally, a cold seed on a host without Essentia enqueues the
+  track and polls Redis for the Mac embed worker to finish before responding.
