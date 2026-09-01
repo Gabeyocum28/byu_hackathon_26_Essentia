@@ -48,3 +48,16 @@ def get_features(track_id: str) -> dict | None:
 def corpus_ids() -> list[str]:
     """All track ids currently analyzed and stored."""
     return sorted(client().smembers("corpus:ids"))
+
+
+def get_many_features(track_ids: list[str]) -> list[dict | None]:
+    """Read many tracks' features in one round trip, in the order asked for.
+
+    /recommend needs every vector in the corpus. One GET per track is one
+    network round trip per track, which is what the endpoint's cost actually
+    was at corpus scale -- 25 s at 7.8k tracks, and linear from there.
+    """
+    if not track_ids:
+        return []
+    raw = client().mget([f"features:{t}" for t in track_ids])
+    return [json.loads(r) if r else None for r in raw]
