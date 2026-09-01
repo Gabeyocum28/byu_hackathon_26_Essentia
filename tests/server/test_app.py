@@ -95,18 +95,83 @@ def test_seed_cold_track_downloads_analyzes_and_stores(client, fake_redis, monke
     assert store.get_track(tid) == track
 
 
-def test_seed_fixture_fallback_when_analysis_unavailable(client, fake_redis, monkeypatch):
-    """Mock-first: analysis is a stub -> fixture tracks still seed as ready."""
+@pytest.fixture
+def analysis_unavailable(monkeypatch):
+    """The ARM-VM condition: essentia can't import, plus instant poll timing."""
     def not_implemented(path):
         raise NotImplementedError
 
-    tid = FIXTURE[0]["track_id"]
-    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(FIXTURE[0]))
-    monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
     monkeypatch.setattr(app_module, "analyze_track", not_implemented)
+    monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
+    monkeypatch.setattr(app_module, "_EMBED_WAIT_S", 0.0)
+    monkeypatch.setattr(app_module, "_EMBED_POLL_S", 0.0)
+
+
+def test_seed_enqueues_and_reports_unanalyzed_on_timeout(
+        client, fake_redis, analysis_unavailable, monkeypatch):
+    track = dict(FIXTURE[0])
+    tid = track["track_id"]
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(track))
+
     body = client.post("/seed", json={"track_id": tid})
     assert body.status_code == 200
-    assert body.json()["status"] == "ready"
+    assert body.json() == {"track_id": tid, "status": "unanalyzed"}
+    # metadata stored for the worker, job queued, but corpus untouched
+    assert store.get_track(tid) == track
+    assert fake_redis.lists["embed:queue"] == [tid]
+    assert tid not in store.corpus_ids()
+
+
+def test_seed_ready_when_worker_delivers_features(
+        client, fake_redis, analysis_unavailable, monkeypatch):
+    track = dict(FIXTURE[1])
+    tid = track["track_id"]
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(track))
+    # First get_features call (the warm check) misses and plants the
+    # features, as if the worker finished during the wait; later polls hit.
+    real_get = store.get_features
+    monkeypatch.setattr(app_module, "_EMBED_WAIT_S", 1.0)
+    polled = {"n": 0}
+
+    def get_features_then_appear(track_id):
+        polled["n"] += 1
+        if polled["n"] == 1:
+            store.put_track(track, fake_features(0.5))
+            return None
+        return real_get(track_id)
+
+    monkeypatch.setattr(store, "get_features", get_features_then_appear)
+    body = client.post("/seed", json={"track_id": tid}).json()
+    assert body == {"track_id": tid, "status": "ready"}
+
+
+def test_seed_double_tap_enqueues_once(
+        client, fake_redis, analysis_unavailable, monkeypatch):
+    track = dict(FIXTURE[2])
+    tid = track["track_id"]
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(track))
+    client.post("/seed", json={"track_id": tid})
+    client.post("/seed", json={"track_id": tid})
+    assert fake_redis.lists["embed:queue"] == [tid]
+
+
+def test_seed_redis_down_degrades_to_ready(client, monkeypatch):
+    """No fake_redis fixture: store.client() raises -> legacy mock-first path."""
+    def no_redis():
+        raise ConnectionError("redis down")
+
+    monkeypatch.setattr(store, "client", no_redis)
+    monkeypatch.setattr(app_module, "_EMBED_WAIT_S", 0.0)
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(FIXTURE[3]))
+    monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
+
+    def not_implemented(path):
+        raise NotImplementedError
+
+    monkeypatch.setattr(app_module, "analyze_track", not_implemented)
+    tid = FIXTURE[3]["track_id"]
+    body = client.post("/seed", json={"track_id": tid}).json()
+    assert body == {"track_id": tid, "status": "ready"}
 
 
 def test_seed_unknown_track_404(client, fake_redis, monkeypatch):
@@ -265,7 +330,8 @@ def test_seed_is_never_recommended_to_itself(client, seeded_corpus):
 
 def test_seed_falls_back_when_essentia_unavailable(client, fake_redis, monkeypatch):
     """ARM VM: essentia has no aarch64 wheels, so analyze_track raises
-    ImportError there. Seed must degrade like the stub case, not 500."""
+    ImportError there. Seed must queue for the worker, not 500, and reports
+    unanalyzed rather than the old silent-ready fixture fallback."""
     def no_essentia(path):
         raise ImportError("No module named 'essentia'")
 
@@ -273,9 +339,11 @@ def test_seed_falls_back_when_essentia_unavailable(client, fake_redis, monkeypat
     monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(FIXTURE[0]))
     monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
     monkeypatch.setattr(app_module, "analyze_track", no_essentia)
+    monkeypatch.setattr(app_module, "_EMBED_WAIT_S", 0.0)
+    monkeypatch.setattr(app_module, "_EMBED_POLL_S", 0.0)
     body = client.post("/seed", json={"track_id": tid})
     assert body.status_code == 200
-    assert body.json()["status"] == "ready"
+    assert body.json() == {"track_id": tid, "status": "unanalyzed"}
 
 
 def test_recommend_limit_is_capped(client, seeded_corpus):
