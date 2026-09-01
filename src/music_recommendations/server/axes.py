@@ -10,17 +10,17 @@ from contract.features import AXES
 
 AXIS_FEATURES: dict[str, tuple[str, int]] = {
     "sounds_like": ("embedding", 1),
-    "groove":      ("groove", 1),
     "surprise":    ("embedding", -1),   # most distant by embedding cosine
 }
 
 # Axes that blend several feature keys instead of ranking on one.
 #
-# Ranking on a single key picks extremists: for a Miles Davis seed, pure
-# embedding returned a track sitting at the 21st percentile of groove, and pure
-# groove returned one at the 19th percentile of sound. Each is the right answer
-# to a narrower question than "what is similar to this". Requiring agreement
-# across keys is much closer to what a listener means.
+# Ranking on a single key picks extremists: the embedding encodes timbre and
+# production, so on its own it wanders across genres -- two tracks can match
+# because they were mastered alike. The genre head states the style outright.
+# Requiring agreement between them is much closer to what a listener means by
+# "similar", and it is the measured cause of the complaint that sounds_like
+# changes genre too often.
 #
 # The weights are combined over PERCENTILES, not raw scores: cosine and
 # euclidean are not on the same scale, and a weighted sum of them would let the
@@ -29,7 +29,7 @@ AXIS_FEATURES: dict[str, tuple[str, int]] = {
 # tracks strong on both dominate any middle weighting -- so 50/50 needs no
 # tuning to be defensible.
 BLENDED_AXES: dict[str, dict[str, float]] = {
-    "best_match": {"embedding": 0.5, "groove": 0.5},
+    "best_match": {"embedding": 0.5, "genre": 0.5},
 }
 
 # This table and contract AXES must list the same ids: /axes serves the

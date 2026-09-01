@@ -9,7 +9,7 @@ TRACK = {
     "artwork_url": "http://x/a.jpg",
     "preview_url": "http://x/p.mp3",
 }
-FEATURES = {"embedding": [0.1, 0.2], "groove": [120.0, 0.9, 3.1, 0.5]}
+FEATURES = {"embedding": [0.1, 0.2], "genre": [0.7, 0.1, 0.2]}
 
 
 def test_put_then_get_track_roundtrips(fake_redis):

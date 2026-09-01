@@ -13,14 +13,13 @@ TRACK_FIELDS = frozenset(
 # GET /axes returns exactly this, in this order.
 AXES = [
     {"id": "sounds_like", "label": "Sounds like this"},
-    {"id": "groove",      "label": "Keep the groove"},
-    {"id": "surprise",    "label": "Surprise me"},
     {"id": "best_match",  "label": "Best match"},
+    {"id": "surprise",    "label": "Surprise me"},
 ]
 
 # analyze_track(mp3_path) -> dict with exactly these keys.
 # Arrays are 1-D float lists/ndarrays of the stated length; scalars are float.
 FEATURE_KEYS = {
     "embedding": 1280,   # EffNet penultimate, frame-mean
-    "groove": 4,         # [bpm, beats_confidence, onset_rate, danceability]
+    "genre": 400,        # Discogs400 style probabilities, from that embedding
 }

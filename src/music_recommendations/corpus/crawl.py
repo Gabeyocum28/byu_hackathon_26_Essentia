@@ -71,3 +71,29 @@ def from_charts(genre_ids: list[int] | None = None, per_genre: int = 100) -> lis
         for track in deezer.chart_tracks(genre_id, limit=per_genre):
             tracks.setdefault(track["track_id"], track)
     return list(tracks.values())
+
+
+def deep_cuts(artist_ids: list[int], albums_per_artist: int = 6):
+    """Album tracks for each artist, yielded as they are found.
+
+    from_charts and snowball both reach an artist through /top, which returns
+    their HITS -- so a corpus built from either is mainstream by construction,
+    however many artists it covers. An artist's albums are the other 90% of the
+    catalogue, and that is where anything obscure lives.
+
+    A generator because a crawl this size is measured in hours: the caller
+    flushes as it goes rather than losing everything to one interruption.
+    """
+    for artist_id in artist_ids:
+        for album_id in deezer.artist_albums(artist_id, limit=albums_per_artist):
+            yield from deezer.album_tracks(album_id)
+
+
+def resolve_artists(names: list[str]) -> list[int]:
+    """Artist names -> Deezer ids, skipping the ones it cannot find."""
+    ids = []
+    for name in names:
+        artist = deezer.search_artist(name)
+        if artist:
+            ids.append(artist["id"])
+    return ids

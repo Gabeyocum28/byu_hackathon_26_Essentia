@@ -119,3 +119,41 @@ def chart_tracks(genre_id: int, limit: int = 100) -> list[dict]:
 def fresh_preview_url(track_id: str) -> str | None:
     """Preview URLs are signed and expire (~15 min); refetch for a new one."""
     return _get(f"/track/{track_id}").get("preview") or None
+
+
+def artist_albums(artist_id: int, limit: int = 50) -> list[int]:
+    """Album ids for an artist, newest first as Deezer orders them."""
+    return [
+        raw["id"] for raw in _get(f"/artist/{artist_id}/albums", limit=limit).get("data", [])
+    ][:limit]
+
+
+def album_tracks(album_id: int, limit: int = 50) -> list[dict]:
+    """Every track on an album as contract Tracks.
+
+    /artist/{id}/top returns an artist's HITS, so a corpus built from it is
+    mainstream by construction however many artists it covers. Album tracks are
+    where the deep cuts live -- same artists, the other 90% of their catalogue.
+    The album payload omits the nested artist/album objects that
+    track_to_contract expects, so they are filled in from the album itself.
+    """
+    payload = _get(f"/album/{album_id}", limit=limit)
+    if not payload.get("id"):
+        return []
+    shell = {
+        "title": payload.get("title", ""),
+        "cover_medium": payload.get("cover_medium") or payload.get("cover") or "",
+    }
+    artist = payload.get("artist") or {}
+    out = []
+    for raw in (payload.get("tracks") or {}).get("data", []):
+        track = track_to_contract({
+            **raw,
+            "artist": raw.get("artist") or artist,
+            "album": {"title": shell["title"], "cover_medium": shell["cover_medium"]},
+        })
+        if track:
+            out.append(track)
+        if len(out) >= limit:
+            break
+    return out
