@@ -63,7 +63,7 @@ struct SearchView: View {
                     }
                 }
             }
-            .navigationTitle("BestRec")
+            .navigationTitle("Essentia")
             .searchable(text: $model.query, prompt: "Search for a track")
             .onSubmit(of: .search) {
                 Task { await model.search() }
