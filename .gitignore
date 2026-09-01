@@ -1,5 +1,6 @@
 models/
 audio_cache/
+corpus_candidates.json
 .venv/
 venv/
 __pycache__/
