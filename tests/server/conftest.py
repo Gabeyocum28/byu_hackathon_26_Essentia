@@ -43,8 +43,14 @@ class FakeRedis:
         self.lists.setdefault(key, []).extend(values)
 
     def brpop(self, key, timeout=0):
-        items = self.lists.get(key)
-        return (key, items.pop(0)) if items else None
+        # Real BRPOP takes one key or several and answers from the first
+        # non-empty one in order — that ordering is how the worker gives
+        # embed jobs priority over attribution jobs.
+        for name in ([key] if isinstance(key, str) else list(key)):
+            items = self.lists.get(name)
+            if items:
+                return (name, items.pop(0))
+        return None
 
 
 @pytest.fixture(autouse=True)

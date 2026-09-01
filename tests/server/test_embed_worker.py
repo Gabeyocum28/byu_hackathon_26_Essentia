@@ -102,10 +102,110 @@ def test_tick_survives_a_dequeue_connection_error(monkeypatch):
             raise ConnectionError("connection refused")
         return None
 
-    monkeypatch.setattr(worker.store, "dequeue_embed", flaky_dequeue)
+    monkeypatch.setattr(worker.store, "dequeue_job", flaky_dequeue)
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
 
     worker._tick()  # first call: dequeue raises, caught and swallowed
     assert calls["n"] == 1
     worker._tick()  # second call: process continues normally
     assert calls["n"] == 2
+
+
+# ---- T2.6: attribution jobs share the loop with embed jobs ----
+
+REC = {**TRACK, "track_id": "43", "title": "Flamenco Sketches"}
+
+
+@pytest.fixture
+def embedding_stub(monkeypatch, tmp_path):
+    """Stands in for essentia: 'embeds' audio as its per-band energy, so
+    deleting a band provably changes the vector without loading a model."""
+    import numpy as np
+
+    mp3 = tmp_path / "seed.mp3"
+    mp3.write_bytes(b"mp3")
+    monkeypatch.setattr(worker, "download_preview", lambda url: mp3)
+
+    class FakeEmbedding:
+        SAMPLE_RATE = 16000
+
+        @staticmethod
+        def load_audio(path):
+            t = np.arange(16000) / 16000.0
+            return np.sin(2 * np.pi * 200 * t) + np.sin(2 * np.pi * 4000 * t)
+
+        @staticmethod
+        def effnet_frames(path):
+            import wave as wave_mod
+
+            with wave_mod.open(str(path), "rb") as src:
+                raw = src.readframes(src.getnframes())
+            audio = np.frombuffer(raw, dtype="<i2").astype(float)
+            spectrum = np.abs(np.fft.rfft(audio))
+            lows = spectrum[:len(spectrum) // 2].sum()
+            highs = spectrum[len(spectrum) // 2:].sum()
+            return np.array([[lows, highs]])
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "music_recommendations.analysis.embedding", FakeEmbedding,
+    )
+    monkeypatch.setattr(
+        "music_recommendations.analysis.embedding", FakeEmbedding, raising=False
+    )
+    return FakeEmbedding
+
+
+def test_dequeue_job_gives_embed_work_priority_over_attribution(fake_redis):
+    store.enqueue_attribution("42", "43")
+    store.enqueue_embed("42")
+
+    assert store.dequeue_job(timeout=0) == ("embed", "42")
+    assert store.dequeue_job(timeout=0) == ("attribution", "42|43")
+    assert store.dequeue_job(timeout=0) is None
+
+
+def test_tick_routes_an_attribution_job(fake_redis, monkeypatch):
+    seen = []
+    monkeypatch.setattr(worker, "process_attribution",
+                        lambda seed, rec: seen.append((seed, rec)) or True)
+    store.enqueue_attribution("42", "43")
+
+    worker._tick()
+
+    assert seen == [("42", "43")]
+
+
+def test_process_attribution_writes_one_delta_per_band(fake_redis, embedding_stub,
+                                                       monkeypatch):
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+    store.enqueue_attribution("42", "43")
+
+    assert worker.process_attribution("42", "43") is True
+
+    cached = store.get_attribution("42", "43")
+    assert cached["status"] == "ready"
+    assert cached["base"] == pytest.approx(1.0)
+    assert len(cached["bands"]) == 10
+    for band in cached["bands"]:
+        assert band["hi_hz"] > band["lo_hz"]
+        assert isinstance(band["delta"], float)
+    # Deleting audio must move the model's answer for at least one band,
+    # otherwise the attribution is measuring nothing.
+    assert any(abs(band["delta"]) > 1e-9 for band in cached["bands"])
+    # Marker cleared, so a later re-request can queue the pair again.
+    assert store.enqueue_attribution("42", "43") is True
+
+
+def test_process_attribution_caches_failure_so_the_phone_stops_polling(fake_redis,
+                                                                       monkeypatch):
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})   # rec never analyzed
+
+    assert worker.process_attribution("42", "43") is False
+
+    cached = store.get_attribution("42", "43")
+    assert cached["status"] == "failed"
+    assert cached["error"]
