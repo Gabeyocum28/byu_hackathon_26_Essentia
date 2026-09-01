@@ -10,12 +10,12 @@
 import Foundation
 
 enum AppConfig {
-    /// Live Essencia server (Gabe's Mac via ngrok). The URL changes whenever
-    /// the tunnel restarts — swap it here if search starts failing. HTTPS, so
-    /// no ATS exception is needed.
-    nonisolated static let baseURL = URL(string: "https://1afe-128-187-112-3.ngrok-free.app")!
+    /// Live Essencia server (Gabe's Mac via Cloudflare tunnel). The URL changes
+    /// whenever the tunnel restarts — swap it here if search starts failing.
+    /// HTTPS, so no ATS exception is needed.
+    nonisolated static let baseURL = URL(string: "https://backup-exemption-visit-rush.trycloudflare.com")!
 
-    /// ngrok serves a browser-warning interstitial (HTML) unless this header is
-    /// present; with it, every request gets straight JSON.
-    nonisolated static let extraHeaders: [String: String] = ["ngrok-skip-browser-warning": "1"]
+    /// Extra headers applied to every request. (ngrok needed a skip-warning
+    /// header; Cloudflare doesn't — kept as a hook for whatever tunnel is used.)
+    nonisolated static let extraHeaders: [String: String] = [:]
 }
