@@ -211,3 +211,18 @@ def test_root_lists_routes(client):
     body = client.get("/").json()
     assert "/axes" in str(body)
     assert "/recommend" in str(body)
+
+
+def test_seed_falls_back_when_essentia_unavailable(client, fake_redis, monkeypatch):
+    """ARM VM: essentia has no aarch64 wheels, so analyze_track raises
+    ImportError there. Seed must degrade like the stub case, not 500."""
+    def no_essentia(path):
+        raise ImportError("No module named 'essentia'")
+
+    tid = FIXTURE[0]["track_id"]
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(FIXTURE[0]))
+    monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
+    monkeypatch.setattr(app_module, "analyze_track", no_essentia)
+    body = client.post("/seed", json={"track_id": tid})
+    assert body.status_code == 200
+    assert body.json()["status"] == "ready"

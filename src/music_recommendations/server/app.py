@@ -113,9 +113,10 @@ def seed(req: SeedRequest) -> dict:
         mp3 = _download_preview(track["preview_url"])
         features = _to_plain(analyze_track(mp3))
         _safe(store.put_track, track, features)
-    except NotImplementedError:
-        # Analysis lane not landed yet: mock-first, the seed is "ready"
-        # and /recommend serves its fixture fallback.
+    except (NotImplementedError, ImportError):
+        # Analysis unavailable — stub not landed, or essentia can't import on
+        # this host (no aarch64 wheels on the ARM VM). Mock-first: the seed is
+        # "ready" and /recommend serves its fixture fallback.
         pass
     return ready
 
