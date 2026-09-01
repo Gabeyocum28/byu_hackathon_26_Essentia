@@ -26,6 +26,10 @@ def main() -> None:
     fetch(registry.EFFNET_URL, registry.MODELS_DIR / registry.EFFNET_FILE)
     for head in registry.HEADS.values():
         fetch(registry.model_url(head.filename), registry.MODELS_DIR / head.filename)
+        # The .json carries the class labels. Binary heads disagree on which
+        # index is positive (see heads.py), so it is required, not optional.
+        meta = head.filename.replace(".pb", ".json")
+        fetch(registry.model_url(meta), registry.MODELS_DIR / meta)
     print("models ready")
 
 

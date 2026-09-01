@@ -3,6 +3,7 @@ models/
 # against the `models/` ML-artifact rule above, so re-include it explicitly.
 !ios/Hackathon/Hackathon/Models/
 audio_cache/
+corpus_candidates.json
 .venv/
 venv/
 __pycache__/
