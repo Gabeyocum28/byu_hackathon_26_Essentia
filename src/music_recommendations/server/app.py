@@ -675,6 +675,33 @@ def viz_extremes(pc: int = Query(1, ge=1, le=8),
     }
 
 
+@app.get("/viz/attribute")
+def viz_attribute(seed: str, rec: str) -> dict:
+    """Which frequency bands carry this pair's similarity (T2.6).
+
+    Non-contract debug/demo endpoint, and the only /viz route that can't
+    answer from the matrix alone: the counterfactual has to go back through
+    the real model, which lives on the Mac worker. So this route is a
+    mailbox — it serves the cached answer, or queues the pair and says
+    "pending" while the worker band-stops, re-embeds, and writes the result.
+    """
+    if seed == rec:
+        raise HTTPException(400, "seed and rec must differ")
+
+    ids, _ = _viz_embedding_corpus()
+    present = set(ids)
+    for track_id in (seed, rec):
+        if track_id not in present:
+            raise HTTPException(404, f"track {track_id} not analyzed")
+
+    cached = _safe(store.get_attribution, seed, rec)
+    if cached:
+        return cached
+
+    _safe(store.enqueue_attribution, seed, rec)
+    return {"status": "pending"}
+
+
 def _fixture_fallback(track_id: str, limit: int) -> list[dict]:
     tracks = [t for t in _fixture_tracks() if t["track_id"] != track_id][:limit]
     return [

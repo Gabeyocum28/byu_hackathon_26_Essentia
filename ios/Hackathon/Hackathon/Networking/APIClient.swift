@@ -99,6 +99,34 @@ actor APIClient {
         try await get("viz/hubs", as: VizHubs.self)
     }
 
+    /// GET /viz/tour — whole-corpus 8-d PCA coordinates for the Grand Tour.
+    func vizTour() async throws -> VizTour {
+        try await get("viz/tour", as: VizTour.self)
+    }
+
+    /// GET /viz/attribute — per-band occlusion attribution for one pair.
+    /// Answers `pending` until the Mac worker has run the counterfactuals.
+    func vizAttribute(seed: String, rec: String) async throws -> VizAttribution {
+        try await get("viz/attribute", query: [
+            URLQueryItem(name: "seed", value: seed),
+            URLQueryItem(name: "rec", value: rec),
+        ], as: VizAttribution.self)
+    }
+
+    /// GET /viz/mst — minimum spanning tree over cosine distance (H0 barcode).
+    func vizMST() async throws -> VizMST {
+        try await get("viz/mst", as: VizMST.self)
+    }
+
+    /// GET /viz/extremes?pc=...&limit=... — what a principal component sounds
+    /// like: its most negative and most positive tracks.
+    func vizExtremes(pc: Int, limit: Int = 4) async throws -> VizExtremesResponse {
+        try await get("viz/extremes", query: [
+            URLQueryItem(name: "pc", value: String(pc)),
+            URLQueryItem(name: "limit", value: String(limit)),
+        ], as: VizExtremesResponse.self)
+    }
+
     // MARK: - Transport
 
     private func get<T: Decodable>(_ path: String, query: [URLQueryItem] = [], as type: T.Type) async throws -> T {

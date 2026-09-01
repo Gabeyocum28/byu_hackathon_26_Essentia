@@ -257,3 +257,95 @@ def score_math(seed_vec: np.ndarray, rec_vec: np.ndarray, metric: str,
         ),
         "centrality": centrality,
     }
+
+
+# ---- occlusion attribution (T2.6): which frequencies carry a similarity ----
+
+ATTRIBUTION_BANDS = 10
+# EffNet consumes 16 kHz mono, so the model literally cannot see anything
+# above 8 kHz: bands stop just under that Nyquist rather than at the 12 kHz
+# a 44.1 kHz display spectrogram could show.
+ATTRIBUTION_LO_HZ = 60.0
+ATTRIBUTION_HI_HZ = 7800.0
+
+
+def band_edges(count: int = ATTRIBUTION_BANDS,
+               lo_hz: float = ATTRIBUTION_LO_HZ,
+               hi_hz: float = ATTRIBUTION_HI_HZ) -> list[tuple[float, float]]:
+    """Log-spaced band boundaries — equal ratios, so each band is the same
+    number of octaves and the bass isn't lumped into one bar."""
+    ratio = hi_hz / lo_hz
+    edges = [lo_hz * ratio ** (k / count) for k in range(count + 1)]
+    return [(edges[i], edges[i + 1]) for i in range(count)]
+
+
+def _periodic_hann(size: int) -> np.ndarray:
+    """Periodic (not symmetric) Hann: at 50% overlap the shifted copies sum
+    to a constant, which is the COLA condition overlap-add reconstruction
+    depends on."""
+    return 0.5 - 0.5 * np.cos(2 * np.pi * np.arange(size) / size)
+
+
+def _stop_gain(freqs: np.ndarray, lo_hz: float, hi_hz: float,
+               taper_bins: int) -> np.ndarray:
+    """1 outside [lo, hi], 0 inside, raised-cosine across `taper_bins` at each
+    edge — a brick wall is a sinc in time and rings audibly (Gibbs).
+
+    Deliberately NOT width-adaptive: this mask has to stay the exact
+    complement of the band-solo mask on the phone, which tapers a fixed
+    number of bins. A band too narrow for its taper is a resolution problem,
+    and the caller fixes it by analyzing with a longer window (see the
+    worker's 8192-point call), not by quietly using a different filter here.
+    """
+    gain = np.ones_like(freqs)
+    inside = np.nonzero((freqs >= lo_hz) & (freqs <= hi_hz))[0]
+    if inside.size == 0:
+        return gain
+    gain[inside] = 0.0
+    first, last = int(inside[0]), int(inside[-1])
+    for step in range(1, taper_bins + 1):
+        ramp = 0.5 * (1 - np.cos(np.pi * step / (taper_bins + 1)))
+        below, above = first - step, last + step
+        if below >= 0:
+            gain[below] = min(gain[below], ramp)
+        if above < gain.size:
+            gain[above] = min(gain[above], ramp)
+    return gain
+
+
+def band_stop(audio: np.ndarray, sample_rate: float, lo_hz: float,
+              hi_hz: float, fft_size: int = 2048, hop: int = 1024,
+              taper_bins: int = 4) -> np.ndarray:
+    """Remove [lo_hz, hi_hz] from a mono waveform, keeping everything else.
+
+    The counterfactual the attribution measures: STFT, zero the bins in the
+    band (tapered), inverse-FFT each frame with its ORIGINAL phase, and
+    overlap-add. Phase never leaves the pipeline, so no Griffin-Lim is
+    needed and an all-pass mask reconstructs the input exactly.
+    """
+    audio = np.asarray(audio, dtype=float).ravel()
+    window = _periodic_hann(fft_size)
+    gain = _stop_gain(np.fft.rfftfreq(fft_size, 1.0 / sample_rate),
+                      lo_hz, hi_hz, taper_bins)
+
+    # Pad by a full frame at each end (and out to a whole number of hops) so
+    # every real sample sits under complete window coverage. Without this the
+    # first and last samples are covered by a vanishing window, and dividing
+    # the overlap-add by that envelope leaks unfiltered audio into the
+    # counterfactual — which is exactly the band we claim to have deleted.
+    tail = (-(audio.size + fft_size)) % hop
+    padded = np.concatenate([
+        np.zeros(fft_size), audio, np.zeros(fft_size + tail),
+    ])
+
+    output = np.zeros_like(padded)
+    envelope = np.zeros_like(padded)
+    for start in range(0, padded.size - fft_size + 1, hop):
+        stop = start + fft_size
+        spectrum = np.fft.rfft(padded[start:stop] * window)
+        output[start:stop] += np.fft.irfft(spectrum * gain, n=fft_size)
+        envelope[start:stop] += window
+
+    resynthesized = np.divide(output, envelope,
+                              out=np.zeros_like(output), where=envelope > 1e-8)
+    return resynthesized[fft_size:fft_size + audio.size]

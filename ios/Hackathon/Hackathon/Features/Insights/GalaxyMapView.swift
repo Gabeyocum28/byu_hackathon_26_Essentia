@@ -199,6 +199,40 @@ struct PointTransform {
         self.pan = pan
     }
 
+    /// Fixed-radius, origin-centered variant for data known to be zero-mean
+    /// under any linear map (e.g. PCA scores viewed through an arbitrary
+    /// orthonormal 2-frame): `scale` and `dataCenter` never depend on the
+    /// current projection, so a rotating view doesn't rescale/"breathe"
+    /// frame to frame. `radius` should bound the largest possible projected
+    /// magnitude — e.g. the max L2 norm of the un-projected vectors, since
+    /// projection through an orthonormal frame can never exceed it.
+    init(radius: Double, size: CGSize, zoom: CGFloat = 1, pan: CGSize = .zero) {
+        let span = max(radius * 2, 1e-9)
+        let padding: CGFloat = 16
+        let fit = min(size.width, size.height) - 2 * padding
+        scale = fit > 0 ? fit / span : 1
+        dataCenter = .zero
+        viewCenter = CGPoint(x: size.width / 2, y: size.height / 2)
+        self.zoom = min(max(zoom, 1), 8)
+        self.pan = pan
+    }
+
+    /// Explicit-bounds variant: same scale/center math as the x/y-array
+    /// initializer, but from precomputed bounds instead of scanning the
+    /// arrays — for callers that cache a data set's extent once and redraw
+    /// it many times (e.g. a slider-driven overlay) without re-scanning.
+    init(minX: Double, maxX: Double, minY: Double, maxY: Double, size: CGSize,
+         zoom: CGFloat = 1, pan: CGSize = .zero) {
+        let span = max(maxX - minX, maxY - minY, 1e-9)
+        let padding: CGFloat = 16
+        let fit = min(size.width, size.height) - 2 * padding
+        scale = fit > 0 ? fit / span : 1
+        dataCenter = CGPoint(x: (minX + maxX) / 2, y: (minY + maxY) / 2)
+        viewCenter = CGPoint(x: size.width / 2, y: size.height / 2)
+        self.zoom = min(max(zoom, 1), 8)
+        self.pan = pan
+    }
+
     func place(x: Double, y: Double) -> CGPoint {
         let baseX = viewCenter.x + (x - dataCenter.x) * scale
         let baseY = viewCenter.y - (y - dataCenter.y) * scale

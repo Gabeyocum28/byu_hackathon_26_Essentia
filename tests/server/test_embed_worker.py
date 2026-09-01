@@ -102,10 +102,211 @@ def test_tick_survives_a_dequeue_connection_error(monkeypatch):
             raise ConnectionError("connection refused")
         return None
 
-    monkeypatch.setattr(worker.store, "dequeue_embed", flaky_dequeue)
+    monkeypatch.setattr(worker.store, "dequeue_job", flaky_dequeue)
     monkeypatch.setattr(worker.time, "sleep", lambda s: None)
 
     worker._tick()  # first call: dequeue raises, caught and swallowed
     assert calls["n"] == 1
     worker._tick()  # second call: process continues normally
     assert calls["n"] == 2
+
+
+# ---- T2.6: attribution jobs share the loop with embed jobs ----
+
+REC = {**TRACK, "track_id": "43", "title": "Flamenco Sketches"}
+
+
+@pytest.fixture
+def embedding_stub(monkeypatch, tmp_path):
+    """Stands in for essentia: 'embeds' audio as its per-band energy, so
+    deleting a band provably changes the vector without loading a model."""
+    import numpy as np
+
+    mp3 = tmp_path / "seed.mp3"
+    mp3.write_bytes(b"mp3")
+    monkeypatch.setattr(worker, "download_preview", lambda url: mp3)
+
+    class FakeEmbedding:
+        SAMPLE_RATE = 16000
+
+        @staticmethod
+        def load_audio(path):
+            t = np.arange(16000) / 16000.0
+            return np.sin(2 * np.pi * 200 * t) + np.sin(2 * np.pi * 4000 * t)
+
+        @staticmethod
+        def effnet_frames(path):
+            import wave as wave_mod
+
+            with wave_mod.open(str(path), "rb") as src:
+                raw = src.readframes(src.getnframes())
+            audio = np.frombuffer(raw, dtype="<i2").astype(float)
+            spectrum = np.abs(np.fft.rfft(audio))
+            lows = spectrum[:len(spectrum) // 2].sum()
+            highs = spectrum[len(spectrum) // 2:].sum()
+            return np.array([[lows, highs]])
+
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "music_recommendations.analysis.embedding", FakeEmbedding,
+    )
+    monkeypatch.setattr(
+        "music_recommendations.analysis.embedding", FakeEmbedding, raising=False
+    )
+    return FakeEmbedding
+
+
+def test_dequeue_job_gives_embed_work_priority_over_attribution(fake_redis):
+    store.enqueue_attribution("42", "43")
+    store.enqueue_embed("42")
+
+    assert store.dequeue_job(timeout=0) == ("embed", "42")
+    assert store.dequeue_job(timeout=0) == ("attribution", "42|43")
+    assert store.dequeue_job(timeout=0) is None
+
+
+def test_tick_routes_an_attribution_job(fake_redis, monkeypatch):
+    seen = []
+    monkeypatch.setattr(worker, "process_attribution",
+                        lambda seed, rec: seen.append((seed, rec)) or True)
+    store.enqueue_attribution("42", "43")
+
+    worker._tick()
+
+    assert seen == [("42", "43")]
+
+
+def test_process_attribution_writes_one_delta_per_band(fake_redis, embedding_stub,
+                                                       monkeypatch):
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+    store.enqueue_attribution("42", "43")
+
+    assert worker.process_attribution("42", "43") is True
+
+    cached = store.get_attribution("42", "43")
+    assert cached["status"] == "ready"
+    assert cached["base"] == pytest.approx(1.0)
+    assert len(cached["bands"]) == 10
+    for band in cached["bands"]:
+        assert band["hi_hz"] > band["lo_hz"]
+        assert isinstance(band["delta"], float)
+    # Deleting audio must move the model's answer for at least one band,
+    # otherwise the attribution is measuring nothing.
+    assert any(abs(band["delta"]) > 1e-9 for band in cached["bands"])
+    # Marker cleared, so a later re-request can queue the pair again.
+    assert store.enqueue_attribution("42", "43") is True
+
+
+def test_process_attribution_caches_failure_so_the_phone_stops_polling(fake_redis,
+                                                                       monkeypatch):
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})   # rec never analyzed
+
+    assert worker.process_attribution("42", "43") is False
+
+    cached = store.get_attribution("42", "43")
+    assert cached["status"] == "failed"
+    assert cached["error"]
+
+
+def test_write_wav_keeps_the_audio_at_its_own_level(tmp_path):
+    """No normalization anywhere: a gain would move the counterfactuals off
+    the level the clean track was analyzed at, and a log-mel front end reads
+    that as a spectral change."""
+    import numpy as np
+    import wave as wave_mod
+
+    quiet = 0.25 * np.sin(2 * np.pi * 200 * np.arange(16000) / 16000)
+    path = worker._write_wav(quiet, 16000)
+    try:
+        with wave_mod.open(str(path), "rb") as src:
+            peak = np.abs(np.frombuffer(src.readframes(src.getnframes()),
+                                        dtype="<i2")).max()
+    finally:
+        path.unlink(missing_ok=True)
+
+    assert peak == pytest.approx(0.25 * 32767, rel=0.01)
+
+
+def test_attribution_measures_against_an_identically_processed_reference(
+        fake_redis, embedding_stub, monkeypatch):
+    """Deltas compare wav-vs-wav. Measuring against the stored mp3 embedding
+    would fold the decode difference into all ten bands as a constant."""
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+
+    embeds = []
+    original = worker._embed_waveform
+
+    def counting(mod, samples):
+        embeds.append(len(samples))
+        return original(mod, samples)
+
+    monkeypatch.setattr(worker, "_embed_waveform", counting)
+    assert worker.process_attribution("42", "43") is True
+
+    # One clean reference pass, then one per band.
+    assert len(embeds) == 11
+    # base still reports the stored-embedding cosine, so the number on
+    # screen matches the score the rest of the app shows.
+    assert store.get_attribution("42", "43")["base"] == pytest.approx(1.0)
+
+
+def test_attribution_analyzes_at_the_long_window(fake_redis, embedding_stub,
+                                                 monkeypatch):
+    """The window is the fix for low-band resolution, so it is pinned here:
+    falling back to band_stop's defaults would make neighbouring low bands
+    measure the same thing again."""
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+
+    seen = []
+    original = worker.viz.band_stop
+
+    def spy(audio, sample_rate, lo_hz, hi_hz, **kwargs):
+        seen.append(kwargs)
+        return original(audio, sample_rate, lo_hz, hi_hz, **kwargs)
+
+    monkeypatch.setattr(worker.viz, "band_stop", spy)
+    assert worker.process_attribution("42", "43") is True
+
+    assert len(seen) == 10
+    assert all(k == {"fft_size": 8192, "hop": 4096} for k in seen)
+
+
+def test_attribution_never_clips_a_hot_counterfactual(fake_redis, embedding_stub,
+                                                      monkeypatch):
+    """Deleting a band that opposed a peak can push the residual above full
+    scale. One shared gain keeps every counterfactual inside the rails —
+    a clipped sample is broadband distortion charged to that band."""
+    import numpy as np
+    import wave as wave_mod
+
+    monkeypatch.setattr(worker.deezer, "get_track", lambda t: dict(TRACK))
+    store.put_track(TRACK, {"embedding": [1.0, 0.0]})
+    store.put_track(REC, {"embedding": [1.0, 0.0]})
+    # A hot master: peaks already at full scale before anything is removed.
+    t = np.arange(16000) / 16000.0
+    hot = np.sin(2 * np.pi * 200 * t) + np.sin(2 * np.pi * 4000 * t)
+    hot = hot / np.abs(hot).max()
+    monkeypatch.setattr(embedding_stub, "load_audio", staticmethod(lambda p: hot))
+
+    peaks = []
+    original = worker._write_wav
+
+    def spy(samples, sample_rate):
+        path = original(samples, sample_rate)
+        with wave_mod.open(str(path), "rb") as src:
+            raw = src.readframes(src.getnframes())
+        peaks.append(np.abs(np.frombuffer(raw, dtype="<i2")).max())
+        return path
+
+    monkeypatch.setattr(worker, "_write_wav", spy)
+    assert worker.process_attribution("42", "43") is True
+
+    assert len(peaks) == 11
+    assert max(peaks) < 32767          # nothing pinned to the rail
