@@ -39,6 +39,12 @@ final class InsightsModel {
         }
         isLoading = false
     }
+
+    /// One intent keeps the visual selection and audible selection together.
+    func selectAndPlay(_ rec: VizMap.Rec, play: (Track) -> Void) {
+        selected = rec
+        play(rec.track)
+    }
 }
 
 struct InsightsView: View {
@@ -103,7 +109,7 @@ struct InsightsView: View {
             HStack(spacing: 10) {
                 ForEach(map.recs) { rec in
                     Button {
-                        model.selected = rec
+                        model.selectAndPlay(rec) { playback.toggle($0) }
                     } label: {
                         VStack(spacing: 4) {
                             Artwork(url: rec.artworkURL)
