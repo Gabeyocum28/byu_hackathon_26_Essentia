@@ -608,6 +608,15 @@ private struct MathPanel: View {
     // scale), so the bars plot the values directly.
     private static let grooveLabels = ["Tempo", "Beat conf.", "Onsets", "Dance"]
 
+    /// The blend's feature keys, in the words the screen already uses.
+    private static func partLabel(_ key: String) -> String {
+        switch key {
+        case "embedding": return "sound"
+        case "genre":     return "style"
+        default:          return key
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             Text("Why \u{201C}\(rec.title)\u{201D} scored \(rec.score, specifier: "%.3f")")
@@ -631,7 +640,18 @@ private struct MathPanel: View {
     @ViewBuilder private var scoreFormula: some View {
         let m = rec.math
         VStack(alignment: .leading, spacing: 4) {
-            if m.metric == "cosine" {
+            if let parts = m.parts, let weights = axis.weights {
+                // A blend has no single formula: the score is the weighted
+                // mean of these percentiles, so show the terms being averaged
+                // rather than a cosine that isn't the number above.
+                Text("score = weighted mean of percentiles")
+                ForEach(parts.keys.sorted(), id: \.self) { key in
+                    Text("      " + Self.partLabel(key) + ": "
+                         + String(format: "%.0fth \u{00D7} %.2f",
+                                  parts[key] ?? 0, weights[key] ?? 0))
+                }
+                Text("      = \(rec.score, specifier: "%.3f")")
+            } else if m.metric == "cosine" {
                 Text("cos \u{03B8} = a\u{00B7}b / (\u{2016}a\u{2016}\u{2016}b\u{2016})")
                 Text("      = \(m.dot, specifier: "%.2f") / (\(m.seedNorm, specifier: "%.2f") \u{00D7} \(m.recNorm, specifier: "%.2f"))")
                 Text("      = \(m.dot / (m.seedNorm * m.recNorm), specifier: "%.3f")")

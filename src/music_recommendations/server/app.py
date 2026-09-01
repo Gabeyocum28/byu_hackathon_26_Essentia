@@ -387,10 +387,10 @@ def viz_map(track_id: str, axis: str,
             correction: Literal["on", "off"] = "on") -> dict:
     """Everything the wow screen needs in one payload: the whole corpus as 2D
     points, the seed, and the recs with the actual numbers behind each score."""
-    if axis not in AXIS_FEATURES:
+    blended_weights = BLENDED_AXES.get(axis)
+    if blended_weights is None and axis not in AXIS_FEATURES:
         raise HTTPException(400, f"unknown axis {axis!r}")
 
-    feature_key, direction = AXIS_FEATURES[axis]
     seed_features = _safe(store.get_features, track_id)
     corpus = tuple(_safe(store.corpus_ids, default=[]))
     if seed_features is None or not corpus:
@@ -406,14 +406,31 @@ def viz_map(track_id: str, axis: str,
 
     from music_recommendations.server import rank as rank_mod
 
-    metric = METRICS.get(feature_key, "cosine")
-    use_correction = direction == -1 and correction == "on"
-    ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
-                                             want_correction=use_correction)
-    seed_vec = _vector(seed_features, feature_key)
-    order = rank_mod.rank(seed_vec, matrix, direction=direction,
-                          limit=limit + 1, metric=metric, correction=correction)
-    similarity = rank_mod.scores(seed_vec, matrix, metric)
+    if blended_weights is not None:
+        # A blended axis scores in no single vector space, so there is no one
+        # metric to report. Rank on the same fused percentile /recommend uses:
+        # Insights has to explain the list the user actually saw, and a second
+        # ranking here would show different neighbours than the rec list did.
+        direction, use_correction = 1, False
+        seed_vec = _vector(seed_features, "embedding")
+        ids, fused, parts = _blended(corpus, seed_features, blended_weights)
+        order = np.argsort(fused)[::-1]
+        # The panel still gets real arithmetic: embedding cosine is the number
+        # the map's own axes are drawn from, and `parts` carries each key's
+        # percentile so the blend can be shown as the sum it is.
+        emb_at = {tid: i for i, tid in enumerate(emb_ids)}
+        metric, matrix, correction = "cosine", emb_matrix, None
+    else:
+        feature_key, direction = AXIS_FEATURES[axis]
+        metric = METRICS.get(feature_key, "cosine")
+        use_correction = direction == -1 and correction == "on"
+        ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
+                                                 want_correction=use_correction)
+        seed_vec = _vector(seed_features, feature_key)
+        order = rank_mod.rank(seed_vec, matrix, direction=direction,
+                              limit=limit + 1, metric=metric,
+                              correction=correction)
+        similarity = rank_mod.scores(seed_vec, matrix, metric)
 
     recs = []
     for idx in order:
@@ -423,16 +440,30 @@ def viz_map(track_id: str, axis: str,
         track = _safe(store.get_track, rec_id)
         features = _safe(store.get_features, rec_id, default={})
         pos = position[rec_id]
+        if blended_weights is not None:
+            row = emb_at.get(rec_id)
+            if row is None:
+                continue
+            score = round(float(fused[idx]) / 100.0, 4)
+            math = viz.score_math(seed_vec, matrix[row], metric, None)
+            math["metric"] = "blend"
+            math["parts"] = {
+                key: round(float(values[idx]), 1)
+                for key, values in parts.items()
+            }
+        else:
+            score = float(similarity[idx])
+            math = viz.score_math(
+                seed_vec, matrix[idx], metric,
+                float(correction[idx]) if correction is not None else None,
+            )
         recs.append({
             **(track or {"track_id": rec_id}),
-            "score": float(similarity[idx]),
+            "score": score,
             "x": float(xy[pos, 0]),
             "y": float(xy[pos, 1]),
             "groove": (features or {}).get("groove"),
-            "math": viz.score_math(
-                seed_vec, matrix[idx], metric,
-                float(correction[idx]) if correction is not None else None,
-            ),
+            "math": math,
         })
         if len(recs) == limit:
             break
@@ -457,6 +488,9 @@ def viz_map(track_id: str, axis: str,
             "preview_url": None,
         })
     axis_info = {"id": axis, "metric": metric, "direction": direction}
+    if blended_weights is not None:
+        axis_info["metric"] = "blend"
+        axis_info["weights"] = dict(blended_weights)
     if direction == -1:
         axis_info["correction"] = "on" if use_correction else "off"
 

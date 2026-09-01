@@ -37,9 +37,7 @@ final class SeedModel {
             async let seeded = api.seed(trackID: seed.trackID)
             async let axesList = api.axes()
             let seedResponse = try await seeded
-            // Hide the "Keep the groove" option client-side; the server still
-            // supports the axis, we just don't offer it as a button.
-            axes = try await axesList.filter { $0.id != "groove" }
+            axes = try await axesList
             state = seedResponse.status == "ready" ? .ready : .unanalyzed
         } catch {
             state = .failed
