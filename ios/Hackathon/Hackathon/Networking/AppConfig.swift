@@ -11,9 +11,9 @@ import Foundation
 
 enum AppConfig {
     /// Live Essencia server (Gabe's Mac via Cloudflare tunnel). The URL changes
-    /// whenever the tunnel restarts — swap it here if search starts failing.
-    /// HTTPS, so no ATS exception is needed.
-    nonisolated static let baseURL = URL(string: "https://backup-exemption-visit-rush.trycloudflare.com")!
+    /// The permanent server: the "hackathon" container on the Oracle VM.
+    /// Plain HTTP — the Info.plist ATS exception for this host allows it.
+    nonisolated static let baseURL = URL(string: "http://163.192.48.114:8000")!
 
     /// Extra headers applied to every request. (ngrok needed a skip-warning
     /// header; Cloudflare doesn't — kept as a hook for whatever tunnel is used.)
