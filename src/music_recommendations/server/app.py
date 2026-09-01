@@ -11,12 +11,14 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
 import urllib.request
 from pathlib import Path
 
 import numpy as np
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import NamedTuple
 
 from contract.features import AXES
 from music_recommendations.analysis import analyze_track
@@ -121,6 +123,85 @@ def seed(req: SeedRequest) -> dict:
     return ready
 
 
+class _CorpusMatrix(NamedTuple):
+    corpus: tuple[str, ...]        # the corpus:ids snapshot this was built from
+    ids: list[str]                 # the rows actually present, in row order
+    matrix: np.ndarray
+    correction: np.ndarray | None  # centrality, computed only if an axis wants it
+
+
+# One assembled matrix per feature key, extended as the corpus grows.
+# Every seed ranks against the same vectors, so reading and JSON-parsing each
+# track's features per request was pure repetition -- 25 s at 7.8k tracks and
+# linear from there. Parsing is the cost, not the round trip, so a cache that
+# rebuilt whenever corpus:ids changed bought nothing while a crawl was running:
+# it changes every few seconds. Only genuinely new ids are parsed and appended.
+# Held in process: the corpus is numpy-sized, not database-sized.
+_MATRIX_CACHE: dict[str, _CorpusMatrix] = {}
+# Endpoints are sync, so FastAPI runs them on a threadpool: without this two
+# concurrent requests would each build the matrix, and the first one to finish
+# would be overwritten by the second.
+_MATRIX_LOCK = threading.Lock()
+
+
+def _rows_for(track_ids: list[str], feature_key: str) -> tuple[list[str], list[np.ndarray]]:
+    """Fetch and vectorize a set of tracks, skipping any without this feature."""
+    ids, rows = [], []
+    for track_id, features in zip(track_ids, store.get_many_features(track_ids)):
+        if features and feature_key in features:
+            ids.append(track_id)
+            rows.append(_vector(features, feature_key))
+    return ids, rows
+
+
+def _corpus_matrix(corpus: tuple[str, ...], feature_key: str, metric: str,
+                   want_correction: bool) -> tuple[list[str], np.ndarray, np.ndarray | None]:
+    """The corpus as one matrix, parsing only what it has not seen before."""
+    with _MATRIX_LOCK:
+        return _build(corpus, feature_key, metric, want_correction)
+
+
+def _build(corpus: tuple[str, ...], feature_key: str, metric: str,
+           want_correction: bool) -> tuple[list[str], np.ndarray, np.ndarray | None]:
+    cached = _MATRIX_CACHE.get(feature_key)
+    known = set(cached.ids) if cached else set()
+
+    # Tracks only ever get added, so the common case is a short tail of new ids.
+    # A track disappearing means someone cleared Redis: drop it all and rebuild.
+    if cached is not None and not known.issubset(corpus):
+        cached, known = None, set()
+
+    fresh = [i for i in corpus if i not in known]
+    if cached is None:
+        ids, rows = _rows_for(list(corpus), feature_key)
+        matrix = np.stack(rows) if rows else np.empty((0, 1))
+        cached = _CorpusMatrix(corpus, ids, matrix, None)
+    elif fresh:
+        ids, rows = _rows_for(fresh, feature_key)
+        if rows:
+            cached = _CorpusMatrix(
+                corpus, cached.ids + ids, np.vstack([cached.matrix, np.stack(rows)]),
+                None,  # the corpus moved, so any cached centrality is stale
+            )
+        else:
+            cached = cached._replace(corpus=corpus)
+    _MATRIX_CACHE[feature_key] = cached
+
+    if want_correction and cached.correction is None and len(cached.ids):
+        from music_recommendations.server import rank as rank_mod
+
+        # A property of the corpus rather than of the seed, so it is cached
+        # beside it. It therefore includes the seed's own row, where the
+        # pre-cache code excluded it -- one row in thousands, and it makes the
+        # correction the same for every seed instead of subtly seed-dependent.
+        cached = cached._replace(
+            correction=rank_mod.centrality(cached.matrix, metric)
+        )
+        _MATRIX_CACHE[feature_key] = cached
+
+    return cached.ids, cached.matrix, (cached.correction if want_correction else None)
+
+
 @app.get("/recommend")
 def recommend(track_id: str, axis: str, limit: int = 10) -> dict:
     if axis not in AXIS_FEATURES:
@@ -128,30 +209,36 @@ def recommend(track_id: str, axis: str, limit: int = 10) -> dict:
 
     feature_key, direction = AXIS_FEATURES[axis]
     seed_features = _safe(store.get_features, track_id)
-    candidate_ids = [
-        i for i in _safe(store.corpus_ids, default=[]) if i != track_id
-    ]
+    corpus = tuple(_safe(store.corpus_ids, default=[]))
+    ranked_against = [i for i in corpus if i != track_id]
 
-    if seed_features is None or not candidate_ids:
+    if seed_features is None or not ranked_against:
         results = _fixture_fallback(track_id, limit)
     else:
-        seed_vec = _vector(seed_features, feature_key)
-        matrix = np.stack(
-            [_vector(store.get_features(i), feature_key) for i in candidate_ids]
-        )
         from music_recommendations.server import rank as rank_mod
 
         # The right metric depends on how the vector was built, so analysis
         # declares it per feature key rather than the server assuming cosine.
         metric = METRICS.get(feature_key, "cosine")
+        ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
+                                                 want_correction=direction == -1)
+        seed_vec = _vector(seed_features, feature_key)
+
+        # The seed is a row in the cached matrix like any other, so ask for one
+        # extra and drop it — cheaper than rebuilding the matrix per seed.
         order = rank_mod.rank(
-            seed_vec, matrix, direction=direction, limit=limit, metric=metric
+            seed_vec, matrix, direction=direction, limit=limit + 1,
+            metric=metric, correction=correction,
         )
         similarity = rank_mod.scores(seed_vec, matrix, metric)
         results = []
         for idx in order:
-            track = store.get_track(candidate_ids[idx])
+            if ids[idx] == track_id:
+                continue
+            track = store.get_track(ids[idx])
             results.append({**track, "score": float(similarity[idx])})
+            if len(results) == limit:
+                break
 
     return {"seed_track_id": track_id, "axis": axis, "results": results}
 

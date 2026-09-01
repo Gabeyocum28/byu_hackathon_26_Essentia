@@ -10,6 +10,12 @@
 import Foundation
 
 enum AppConfig {
-    /// Mock server default. Override for the real backend at integration time.
-    nonisolated static let baseURL = URL(string: "http://localhost:8000")!
+    /// Live Essencia server (Gabe's Mac via Cloudflare tunnel). The URL changes
+    /// The permanent server: the "hackathon" container on the Oracle VM.
+    /// Plain HTTP — the Info.plist ATS exception for this host allows it.
+    nonisolated static let baseURL = URL(string: "http://163.192.48.114:8000")!
+
+    /// Extra headers applied to every request. (ngrok needed a skip-warning
+    /// header; Cloudflare doesn't — kept as a hook for whatever tunnel is used.)
+    nonisolated static let extraHeaders: [String: String] = [:]
 }

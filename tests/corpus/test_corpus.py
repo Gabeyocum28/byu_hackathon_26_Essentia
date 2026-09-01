@@ -83,3 +83,71 @@ def test_sharding_covers_every_track_exactly_once(shards):
         seen += [i for i in ids if int(i) % shards == index]
     assert sorted(seen) == sorted(ids)
     assert len(seen) == len(set(seen))
+
+
+def test_next_batch_downloads_start_before_the_current_one_is_analyzed(
+        monkeypatch, tmp_path):
+    """The 10 cores idle if a batch only starts fetching once the last one ends."""
+    import threading
+
+    monkeypatch.setattr(ingest, "BATCH", 2)
+    monkeypatch.setattr(ingest, "already_stored", lambda _t: False)
+    monkeypatch.setattr(ingest.store, "put_track", lambda *_a: None)
+
+    second_batch_started = threading.Event()
+
+    def fake_download(track):
+        if track["track_id"] in ("2", "3"):
+            second_batch_started.set()
+        return tmp_path / f"{track['track_id']}.mp3"
+
+    monkeypatch.setattr(ingest, "download_preview", fake_download)
+
+    overlapped = []
+
+    def fake_analyze_many(paths, workers=None):
+        overlapped.append(second_batch_started.wait(timeout=5))
+        for path in paths:
+            yield path, {"embedding": [0.0]}, None
+
+    monkeypatch.setattr(ingest, "analyze_many", fake_analyze_many)
+
+    tracks = [{"track_id": str(i)} for i in range(4)]
+    assert ingest.ingest(tracks, limit=4, progress=False) == 4
+    assert overlapped[0] is True, "batch 2 must fetch while batch 1 is analyzed"
+
+
+def test_previews_are_deleted_once_their_features_are_stored(monkeypatch, tmp_path):
+    """The features are the product; a corpus of mp3s would fill the disk."""
+    monkeypatch.setattr(ingest, "already_stored", lambda _t: False)
+    monkeypatch.setattr(ingest.store, "put_track", lambda *_a: None)
+
+    mp3s = []
+    for track_id in ("1", "2"):
+        mp3 = tmp_path / f"{track_id}.mp3"
+        mp3.write_bytes(b"audio")
+        mp3s.append(mp3)
+
+    monkeypatch.setattr(ingest, "download_preview",
+                        lambda track: tmp_path / f"{track['track_id']}.mp3")
+    monkeypatch.setattr(
+        ingest, "analyze_many",
+        lambda paths, workers=None: [
+            (paths[0], {"embedding": [0.0]}, None),   # stored
+            (paths[1], None, "CorruptFile: bad mp3"),  # failed
+        ])
+
+    ingest.ingest([{"track_id": "1"}, {"track_id": "2"}], limit=2, progress=False)
+    assert not mp3s[0].exists(), "a stored track's audio is dead weight"
+    assert not mp3s[1].exists(), "a track that cannot be analyzed is no different"
+
+
+def test_a_track_already_in_redis_has_its_leftover_audio_swept(monkeypatch, tmp_path):
+    """A run that died between analysis and cleanup should not leak the file."""
+    monkeypatch.setattr(ingest, "AUDIO_CACHE", tmp_path)
+    monkeypatch.setattr(ingest, "already_stored", lambda _t: True)
+    leftover = tmp_path / "7.mp3"
+    leftover.write_bytes(b"audio")
+
+    assert ingest.ingest([{"track_id": "7"}], limit=1, progress=False) == 0
+    assert not leftover.exists()

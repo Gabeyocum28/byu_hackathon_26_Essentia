@@ -112,3 +112,42 @@ def test_every_axis_feature_has_a_declared_metric():
         assert feature_key in METRICS, f"{feature_key} has no declared metric"
     assert METRICS["groove"] == "euclidean"
     assert METRICS["embedding"] == "cosine"
+
+
+# ---- surprise concentration ----
+
+def test_centrality_matches_the_naive_definition():
+    """The O(n*d) identity must give the same answer as the O(n^2) form."""
+    rng = np.random.default_rng(0)
+    matrix = rng.normal(size=(40, 16))
+    fast = rank.centrality(matrix, "cosine")
+    slow = np.array([rank.scores(row, matrix, "cosine").mean() for row in matrix])
+    assert np.allclose(fast, slow)
+
+
+def test_correction_stops_one_outlier_winning_every_seed():
+    """A track far from everything should not be every seed's 'surprise'."""
+    rng = np.random.default_rng(1)
+    cluster = rng.normal(size=(30, 8)) * 0.1 + np.array([1.0] + [0.0] * 7)
+    outlier = np.array([[-5.0] * 8])
+    matrix = np.vstack([cluster, outlier])
+    outlier_idx = len(matrix) - 1
+
+    raw = [rank.rank(matrix[i], matrix, direction=-1, limit=1)[0]
+           for i in range(len(cluster))]
+    assert raw.count(outlier_idx) == len(cluster), "expected the outlier to dominate"
+
+    correction = rank.centrality(matrix, "cosine")
+    fixed = [rank.rank(matrix[i], matrix, direction=-1, limit=1,
+                       correction=correction)[0] for i in range(len(cluster))]
+    assert fixed.count(outlier_idx) < len(cluster), "correction changed nothing"
+
+
+def test_correction_is_ignored_when_not_supplied():
+    """Similar-axis ranking must be untouched by the surprise fix."""
+    rng = np.random.default_rng(2)
+    matrix = rng.normal(size=(20, 8))
+    seed = matrix[0]
+    assert list(rank.rank(seed, matrix, limit=5)) == list(
+        rank.rank(seed, matrix, limit=5, correction=None)
+    )

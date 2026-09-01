@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -13,6 +14,9 @@ TIMEOUT = 20
 RETRIES = 3
 
 _last_call = 0.0
+# The downloader refetches expired preview URLs from many threads at once, so
+# the delay has to be held under a lock or it is not a delay at all.
+_call_lock = threading.Lock()
 
 
 def _get(path: str, **params) -> dict:
@@ -28,10 +32,11 @@ def _get(path: str, **params) -> dict:
         url += "?" + urllib.parse.urlencode(params)
 
     for attempt in range(RETRIES):
-        elapsed = time.monotonic() - _last_call
-        if elapsed < SLEEP:
-            time.sleep(SLEEP - elapsed)
-        _last_call = time.monotonic()
+        with _call_lock:
+            elapsed = time.monotonic() - _last_call
+            if elapsed < SLEEP:
+                time.sleep(SLEEP - elapsed)
+            _last_call = time.monotonic()
         try:
             with urllib.request.urlopen(url, timeout=TIMEOUT) as response:
                 payload = json.loads(response.read())
