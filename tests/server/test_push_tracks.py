@@ -40,3 +40,62 @@ def test_payload_writes_store_key_layout():
     assert json.dumps(TRACK).encode() in blob
     assert json.dumps(FEATURES).encode() in blob
     assert len(commands) == 4  # leading split artifact + SET, SET, SADD
+
+
+def test_default_workers_is_75_percent_of_cores():
+    assert push.default_workers(cores=8) == 6
+    assert push.default_workers(cores=4) == 3
+    assert push.default_workers(cores=1) == 1   # never zero
+
+
+def test_chart_tracks_maps_and_dedupes(monkeypatch):
+    chart_item = {
+        "id": 7, "title": "Song", "artist": {"name": "A"},
+        "album": {"title": "Al", "cover_medium": "http://x/c.jpg"},
+        "preview": "http://x/p.mp3",
+    }
+    no_preview = dict(chart_item, id=8, preview="")
+    def fake(url):
+        if url.endswith("/genre"):
+            return {"data": [{"id": 0, "name": "All"}, {"id": 132, "name": "Pop"}]}
+        return {"data": [chart_item, no_preview]}
+    monkeypatch.setattr(push, "_get_json", fake)
+    tracks = push.chart_tracks(skip_ids={"9"})
+    assert [t["track_id"] for t in tracks] == ["7"]   # dedup across genres, no-preview and skip filtered
+    assert tracks[0]["artist"] == "A"
+
+
+def test_chart_tracks_skips_existing_corpus_ids(monkeypatch):
+    item = {"id": 7, "title": "S", "artist": {"name": "A"},
+            "album": {"title": "Al", "cover_medium": "u"}, "preview": "p"}
+    monkeypatch.setattr(push, "_get_json", lambda url:
+        {"data": [{"id": 0, "name": "All"}]} if url.endswith("/genre") else {"data": [item]})
+    assert push.chart_tracks(skip_ids={"7"}) == []
+
+
+def test_process_track_refreshes_preview_url(monkeypatch):
+    """Deezer preview URLs expire (~15 min hdnea token); a queued track's URL
+    is stale by the time a worker reaches it. Refresh via get_track first."""
+    stale = dict(TRACK, preview_url="http://x/expired.mp3")
+    fresh = dict(TRACK, preview_url="http://x/fresh.mp3")
+    seen = {}
+    monkeypatch.setattr(push, "_fresh_track", lambda tid: dict(fresh))
+    monkeypatch.setattr(push, "analyze", lambda t: seen.update(t) or FEATURES)
+    monkeypatch.setattr(push, "push", lambda blob: None)
+    tid, err = push._process_track(stale)
+    assert err == ""
+    assert seen["preview_url"] == "http://x/fresh.mp3"
+
+
+def test_progress_line_handles_bare_id_dicts():
+    """The retry path queues {"track_id": id} only; the progress line must
+    not KeyError on missing artist/title (it killed the retry run's logs)."""
+    line = push.progress_line(1, 2, {"track_id": "9"}, err="", rate=88.0)
+    assert "9" in line and "[1/2]" in line
+
+
+def test_progress_line_with_full_track_and_failure():
+    full = push.progress_line(2, 2, TRACK, err="", rate=90.0)
+    assert "Miles Davis" in full
+    failed = push.progress_line(2, 2, {"track_id": "9"}, err="boom", rate=0)
+    assert "FAILED" in failed and "boom" in failed
