@@ -43,7 +43,6 @@ final class SearchModel {
 
 struct SearchView: View {
     @State private var model = SearchModel()
-    @State private var playback = PlaybackController()
 
     var body: some View {
         NavigationStack {
@@ -52,8 +51,11 @@ struct SearchView: View {
                     ContentUnavailableView("Something went wrong", systemImage: "wifi.slash", description: Text(errorMessage))
                 } else {
                     List(model.results) { track in
-                        NavigationLink(value: track) {
-                            TrackRow(track: track)
+                        HStack {
+                            NavigationLink(value: track) {
+                                TrackRow(track: track)
+                            }
+                            PlayButton(track: track)
                         }
                     }
                     .overlay {
@@ -73,6 +75,5 @@ struct SearchView: View {
                 RecommendationsView(seed: rec.seed, axis: rec.axis)
             }
         }
-        .environment(playback)
     }
 }
