@@ -14,11 +14,16 @@ def _features():
 
 def test_axes_ids_match_spec():
     f = _features()
-    # Diverged from the spec's original three: best_match blends the embedding
-    # and genre percentiles, and the groove axis was dropped — four rhythm
-    # numbers could not carry a recommendation on their own.
-    assert [a["id"] for a in f.AXES] == [
-        "sounds_like", "best_match", "surprise",
+    # Diverged from the spec's original five: groove was dropped (four rhythm
+    # numbers could not carry a recommendation on their own), then best_match
+    # was cut so the two remaining buttons read as opposites.
+    assert [a["id"] for a in f.AXES] == ["sounds_like", "surprise"]
+
+
+def test_axis_labels_are_the_two_opposites():
+    f = _features()
+    assert [a["label"] for a in f.AXES] == [
+        "More sounds like this", "Nothing like this",
     ]
 
 

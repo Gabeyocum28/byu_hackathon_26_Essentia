@@ -12,9 +12,8 @@ TRACK_FIELDS = frozenset(
 
 # GET /axes returns exactly this, in this order.
 AXES = [
-    {"id": "sounds_like", "label": "Sounds like this"},
-    {"id": "best_match",  "label": "Best match"},
-    {"id": "surprise",    "label": "Surprise me"},
+    {"id": "sounds_like", "label": "More sounds like this"},
+    {"id": "surprise",    "label": "Nothing like this"},
 ]
 
 # analyze_track(mp3_path) -> dict with exactly these keys.

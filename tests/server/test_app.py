@@ -246,7 +246,7 @@ def test_recommend_unknown_axis_400(client, seeded_corpus):
 def test_recommend_unseeded_track_falls_back_to_fixture(client, fake_redis):
     """Mock-first: empty corpus -> fixture tracks with dummy descending scores."""
     body = client.get(
-        "/recommend", params={"track_id": FIXTURE[0]["track_id"], "axis": "best_match"}
+        "/recommend", params={"track_id": FIXTURE[0]["track_id"], "axis": "sounds_like"}
     ).json()
     ids = [t["track_id"] for t in body["results"]]
     assert len(ids) == 10
@@ -283,7 +283,7 @@ def test_seed_works_without_redis(no_redis, monkeypatch):
 def test_recommend_works_without_redis(no_redis):
     client = TestClient(app_module.app)
     body = client.get(
-        "/recommend", params={"track_id": FIXTURE[0]["track_id"], "axis": "best_match"}
+        "/recommend", params={"track_id": FIXTURE[0]["track_id"], "axis": "sounds_like"}
     )
     assert body.status_code == 200
     assert len(body.json()["results"]) == 10
@@ -339,7 +339,7 @@ def test_repeat_requests_do_not_re_read_the_whole_corpus(client, seeded_corpus, 
 
 def test_seed_is_never_recommended_to_itself(client, seeded_corpus):
     """The seed is a row in the shared matrix now, so it must be filtered out."""
-    for axis in ("sounds_like", "best_match", "surprise"):
+    for axis in ("sounds_like", "surprise"):
         seed = seeded_corpus[2]["track_id"]
         results = client.get("/recommend", params={"track_id": seed, "axis": axis,
                                                    "limit": 10}).json()["results"]
@@ -380,24 +380,25 @@ def test_recommend_limit_50_is_allowed(client, seeded_corpus):
     assert r.status_code == 200
 
 
-# ---- blended axes ----
+# ---- the axis list ----
 
-def test_best_match_blends_both_keys_and_beats_neither_alone(client, seeded_corpus):
-    """A blend should reward agreement, not let one key pick an extremist."""
-    seed = seeded_corpus[0]["track_id"]
-    results = client.get("/recommend", params={"track_id": seed, "axis": "best_match",
-                                               "limit": 4}).json()["results"]
-    assert len(results) == 4
-    assert seed not in {t["track_id"] for t in results}
-    assert set(results[0]) >= TRACK_KEYS | {"score"}, "contract shape, plus score"
-    scores = [t["score"] for t in results]
-    assert scores == sorted(scores, reverse=True), "best first"
-    assert all(0.0 <= s <= 1.0 for s in scores), "score stays a 0-1 float"
+def test_axes_serves_exactly_the_two_buttons(client):
+    served = client.get("/axes").json()["axes"]
+    assert [a["id"] for a in served] == ["sounds_like", "surprise"]
+    assert [a["label"] for a in served] == [
+        "More sounds like this", "Nothing like this",
+    ]
 
 
-def test_best_match_is_served_by_axes_and_accepted_by_recommend(client):
+def test_retired_best_match_axis_is_rejected(client, seeded_corpus):
+    """It was a real axis; a stale client pressing it must 400, not 500."""
+    r = client.get("/recommend", params={"track_id": seeded_corpus[0]["track_id"],
+                                         "axis": "best_match"})
+    assert r.status_code == 400
+
+
+def test_every_served_axis_is_accepted_by_recommend(client):
     """A button /axes advertises must not 400 when the client presses it."""
     served = {a["id"] for a in client.get("/axes").json()["axes"]}
-    assert "best_match" in served
     for axis in served:
         assert client.get("/recommend", params={"track_id": "x", "axis": axis}).status_code == 200
