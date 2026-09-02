@@ -289,12 +289,23 @@ def test_viz_map_rejects_unknown_axis(client, seeded_corpus):
     ).status_code == 400
 
 
-def test_viz_map_serves_blended_axis(client, seeded_corpus):
-    """Insights opens on whichever axis the user picked, best_match included:
+@pytest.fixture
+def blended_axis():
+    """No blended axis ships today -- best_match was the only one and it was
+    cut. The blending path stays in app.py/viz.py for the next one, so register
+    a throwaway blend here rather than leave that path untested."""
+    from music_recommendations.server.axes import BLENDED_AXES
+    BLENDED_AXES["blend_test"] = {"embedding": 0.5, "genre": 0.5}
+    yield "blend_test"
+    del BLENDED_AXES["blend_test"]
+
+
+def test_viz_map_serves_blended_axis(client, seeded_corpus, blended_axis):
+    """Insights opens on whichever axis the user picked, a blend included:
     before, a blended axis 400d here and the screen showed its error state."""
     tid = seeded_corpus[0]["track_id"]
     r = client.get(
-        "/viz/map", params={"track_id": tid, "axis": "best_match", "limit": 3}
+        "/viz/map", params={"track_id": tid, "axis": blended_axis, "limit": 3}
     )
     assert r.status_code == 200
     body = r.json()
@@ -311,10 +322,11 @@ def test_viz_map_serves_blended_axis(client, seeded_corpus):
         assert set(rec["math"]["parts"]) == {"embedding", "genre"}
 
 
-def test_viz_map_blended_axis_matches_recommend_order(client, seeded_corpus):
+def test_viz_map_blended_axis_matches_recommend_order(client, seeded_corpus,
+                                                      blended_axis):
     """Insights must explain the list the user saw, not re-rank it."""
     tid = seeded_corpus[0]["track_id"]
-    params = {"track_id": tid, "axis": "best_match", "limit": 4}
+    params = {"track_id": tid, "axis": blended_axis, "limit": 4}
     recs = client.get("/recommend", params=params).json()["results"]
     viz_recs = client.get("/viz/map", params=params).json()["recs"]
     assert [r["track_id"] for r in viz_recs] == [r["track_id"] for r in recs]

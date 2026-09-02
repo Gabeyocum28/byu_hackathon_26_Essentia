@@ -13,24 +13,13 @@ AXIS_FEATURES: dict[str, tuple[str, int]] = {
     "surprise":    ("embedding", -1),   # most distant by embedding cosine
 }
 
-# Axes that blend several feature keys instead of ranking on one.
-#
-# Ranking on a single key picks extremists: the embedding encodes timbre and
-# production, so on its own it wanders across genres -- two tracks can match
-# because they were mastered alike. The genre head states the style outright.
-# Requiring agreement between them is much closer to what a listener means by
-# "similar", and it is the measured cause of the complaint that sounds_like
-# changes genre too often.
-#
-# The weights are combined over PERCENTILES, not raw scores: cosine and
-# euclidean are not on the same scale, and a weighted sum of them would let the
-# wider-spread metric dominate for reasons unrelated to similarity. Measured on
-# the live corpus, anything from 30/70 to 70/30 returns the same top results --
-# tracks strong on both dominate any middle weighting -- so 50/50 needs no
-# tuning to be defensible.
-BLENDED_AXES: dict[str, dict[str, float]] = {
-    "best_match": {"embedding": 0.5, "genre": 0.5},
-}
+# Axes that blend several feature keys instead of ranking on one. Empty since
+# the axis list was cut to two: best_match (embedding 0.5 / genre 0.5) lived
+# here. The blending path in app.py and viz.py still works -- weights are
+# combined over PERCENTILES, not raw scores, because cosine and euclidean are
+# not on the same scale -- so restoring a blended axis is one entry here plus
+# one entry in contract AXES.
+BLENDED_AXES: dict[str, dict[str, float]] = {}
 
 # This table and contract AXES must list the same ids: /axes serves the
 # contract list while /recommend validates against this one, so if they drift
