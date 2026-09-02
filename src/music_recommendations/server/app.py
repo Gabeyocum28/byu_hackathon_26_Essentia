@@ -13,6 +13,8 @@ from __future__ import annotations
 import base64
 import json
 import os
+import re
+import unicodedata
 import tempfile
 import threading
 import time
@@ -92,6 +94,33 @@ def _playable(track: dict | None) -> dict | None:
     if not base:
         return track
     return {**track, "preview_url": f"{base}/preview/{track['track_id']}"}
+
+
+# Deezer lists every compilation, remaster and reissue as its own track id,
+# so the corpus holds the same recording many times over -- measured at 17.8%
+# of 90k tracks, with "Rasputin" appearing 15 times. Those copies are near
+# identical audio, so they earn near identical embeddings and arrive together
+# at the top of any ranking: without this a ten-item list can be three songs.
+_VARIANT_PAREN = re.compile(
+    r"\((?:[^)]*(?:remaster|remix|live|version|edit|mix|mono|stereo|deluxe"
+    r"|radio|explicit|feat\.?|bonus)[^)]*)\)", re.I)
+_VARIANT_DASH = re.compile(
+    r"\s*-\s*[^-]*(?:remaster|remix|live|version|edit|mix)[^-]*$", re.I)
+
+
+def _song_key(track: dict | None) -> tuple[str, str] | None:
+    """artist + title stripped of release variation, or None if unusable.
+
+    Unicode-aware on purpose: an ascii-only strip collapses every Korean and
+    Japanese title onto the same empty key, which would suppress unrelated
+    tracks as though they were duplicates of each other.
+    """
+    if not track or not track.get("title") or not track.get("artist"):
+        return None
+    title = unicodedata.normalize("NFKC", track["title"])
+    title = _VARIANT_DASH.sub("", _VARIANT_PAREN.sub("", title))
+    title = re.sub(r"[^\w]+", "", title, flags=re.UNICODE).lower()
+    return (track["artist"].lower(), title) if title else None
 
 
 def _fresh_preview(track_id: str) -> str | None:
@@ -449,6 +478,37 @@ def _blended(corpus: tuple[str, ...], seed_features: dict,
     return base_ids, fused, parts
 
 
+# Duplicates are ~18% of the corpus, so asking for `limit` rows and dropping
+# some leaves the list short. Four times over is slack enough that a seed
+# sitting in a heavily reissued cluster still fills its ten.
+_DUP_HEADROOM = 4
+
+
+def _seen_songs(seed_id: str) -> set:
+    """Song keys already spoken for — starting with the seed's own.
+
+    Seeding "Juicy" and being recommended another pressing of "Juicy" is the
+    most conspicuous form of this bug, and the seed's own row is excluded by
+    track id only, which does not catch its reissues.
+    """
+    seen = set()
+    key = _song_key(_safe(store.get_track, seed_id))
+    if key:
+        seen.add(key)
+    return seen
+
+
+def _keep(track: dict | None, seen: set) -> bool:
+    """True if this track is a song not already in the results."""
+    key = _song_key(track)
+    if key is None:
+        return True          # no usable title: never suppress, just pass it on
+    if key in seen:
+        return False
+    seen.add(key)
+    return True
+
+
 @app.get("/recommend")
 def recommend(track_id: str, axis: str,
               limit: int = Query(10, ge=1, le=50)) -> dict:
@@ -464,10 +524,13 @@ def recommend(track_id: str, axis: str,
     elif axis in BLENDED_AXES:
         ids, fused, parts = _blended(corpus, seed_features, BLENDED_AXES[axis])
         results = []
+        seen = _seen_songs(track_id)
         for idx in np.argsort(fused)[::-1]:
             if ids[idx] == track_id:
                 continue
             track = store.get_track(ids[idx])
+            if not _keep(track, seen):
+                continue
             results.append({**_playable(track), "score":
                             round(float(fused[idx]) / 100.0, 4)})
             if len(results) == limit:
@@ -485,16 +548,21 @@ def recommend(track_id: str, axis: str,
 
         # The seed is a row in the cached matrix like any other, so ask for one
         # extra and drop it — cheaper than rebuilding the matrix per seed.
+        # Over-ask beyond that: duplicates are dropped below, and at ~18% of
+        # the corpus a limit-sized slice can come up short.
         similarity = _similarity(feature_key, matrix, seed_vec, metric)
         order = rank_mod.rank(
-            seed_vec, matrix, direction=direction, limit=limit + 1,
+            seed_vec, matrix, direction=direction, limit=limit * _DUP_HEADROOM + 1,
             metric=metric, correction=correction, similarity=similarity,
         )
         results = []
+        seen = _seen_songs(track_id)
         for idx in order:
             if ids[idx] == track_id:
                 continue
             track = store.get_track(ids[idx])
+            if not _keep(track, seen):
+                continue
             results.append({**_playable(track), "score": float(similarity[idx])})
             if len(results) == limit:
                 break

@@ -575,3 +575,80 @@ def test_seed_does_not_resign_when_the_stored_url_works(client, fake_redis,
         AssertionError("must not re-sign when the stored URL downloads")))
 
     client.post("/seed", json={"track_id": track["track_id"]})
+
+
+# ---- duplicate suppression ----
+#
+# Deezer gives every compilation and remaster its own track id, so the corpus
+# holds the same recording many times (measured: 17.8% of 90k tracks). Near
+# identical audio earns near identical embeddings, so the copies arrive
+# together at the top of a ranking and a ten-item list becomes three songs.
+
+def _variants(base: dict, titles: list[str]) -> list[dict]:
+    return [{**base, "track_id": f"{base['track_id']}{i}", "title": t}
+            for i, t in enumerate(titles)]
+
+
+def test_song_key_ignores_release_variation():
+    k = app_module._song_key
+    same = ["Rasputin", "Rasputin (2001 Remaster)", "Rasputin - Single Version",
+            "Rasputin (Radio Edit)", "RASPUTIN"]
+    keys = {k({"artist": "Boney M.", "title": t}) for t in same}
+    assert len(keys) == 1, f"should collapse to one key, got {keys}"
+
+
+def test_song_key_keeps_non_latin_titles_distinct():
+    """An ascii-only strip collapses every Korean title onto the empty key."""
+    k = app_module._song_key
+    a = k({"artist": "Turbo", "title": "회상"})
+    b = k({"artist": "Turbo", "title": "검은 고양이"})
+    assert a is not None and b is not None and a != b
+
+
+def test_song_key_none_when_unusable():
+    k = app_module._song_key
+    assert k(None) is None
+    assert k({"artist": "x"}) is None
+    assert k({"artist": "x", "title": "(Remastered)"}) is None
+
+
+def test_recommend_returns_distinct_songs(client, fake_redis):
+    """Fifteen pressings of one song must not fill the list."""
+    base = dict(FIXTURE[1])
+    seed = dict(FIXTURE[0])
+    store.put_track(seed, fake_features(0.0))
+    for i, t in enumerate(_variants(base, [f"Rasputin ({y} Remaster)"
+                                           for y in range(1990, 2005)])):
+        store.put_track(t, fake_features(0.5))
+    for i, t in enumerate(FIXTURE[2:8]):
+        store.put_track(t, fake_features(0.6 + i / 100))
+
+    body = client.get(
+        f"/recommend?track_id={seed['track_id']}&axis=sounds_like&limit=5"
+    ).json()
+    titles = [r["title"] for r in body["results"]]
+    assert len(titles) == len(set(titles)), f"duplicates leaked: {titles}"
+    assert sum("Rasputin" in t for t in titles) == 1
+
+
+def test_recommend_never_returns_a_reissue_of_the_seed(client, fake_redis):
+    """Seeding a song and being handed another pressing of it is the worst case."""
+    seed = {**FIXTURE[0], "title": "Juicy"}
+    store.put_track(seed, fake_features(0.5))
+    reissue = {**FIXTURE[0], "track_id": "999999", "title": "Juicy (2004 Remaster)"}
+    store.put_track(reissue, fake_features(0.5))
+    for i, t in enumerate(FIXTURE[2:6]):
+        store.put_track(t, fake_features(0.7 + i / 100))
+
+    body = client.get(
+        f"/recommend?track_id={seed['track_id']}&axis=sounds_like&limit=3"
+    ).json()
+    ids = [r["track_id"] for r in body["results"]]
+    assert "999999" not in ids, "returned a reissue of the seed itself"
+
+
+def test_recommend_still_fills_the_limit_despite_duplicates(client, seeded_corpus):
+    body = client.get(
+        f"/recommend?track_id={seeded_corpus[0]['track_id']}&axis=sounds_like&limit=3"
+    ).json()
+    assert len(body["results"]) == 3
