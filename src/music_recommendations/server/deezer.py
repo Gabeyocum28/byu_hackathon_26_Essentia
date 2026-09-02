@@ -65,6 +65,33 @@ def _search_data(q: str, limit: int) -> list[dict]:
 def get_track(track_id: str) -> dict | None:
     """Fetch one track by id, contract-shaped, or None if absent/no preview."""
     item = _get_json(f"{API}/track/{track_id}")
-    if not item.get("id") or not item.get("preview"):
+    if _throttled(item) or not item.get("id") or not item.get("preview"):
         return None
     return _to_track(item)
+
+
+def _throttled(payload: dict) -> bool:
+    """Deezer reports quota exhaustion as HTTP 200 with an "error" object.
+
+    Nothing about the status line says anything went wrong, so a caller that
+    only checks the status parses the error body as a track. corpus/deezer.py
+    learned this during the crawl; the server hits the same API.
+    """
+    return isinstance(payload, dict) and "error" in payload
+
+
+def fresh_preview_url(track_id: str) -> str | None:
+    """A newly signed preview URL for one track, or None.
+
+    Deezer signs previews with an HMAC and ~15 minutes of life, so the URL
+    stored alongside a track is dead long before anyone plays it. Only Deezer
+    can re-sign, and the signature is all that rots -- the file path is
+    stable -- so this asks for the track again and keeps the new signature.
+    """
+    try:
+        item = _get_json(f"{API}/track/{track_id}")
+    except OSError:
+        return None
+    if _throttled(item):
+        return None
+    return item.get("preview") or None

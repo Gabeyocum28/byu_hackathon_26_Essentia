@@ -16,9 +16,14 @@ from __future__ import annotations
 import numpy as np
 
 
-def _normalize(v: np.ndarray) -> np.ndarray:
+def normalize(v: np.ndarray) -> np.ndarray:
+    """Unit-length rows. Public because the corpus matrix is normalized once
+    and cached: doing it per request re-divides the whole matrix every time."""
     norms = np.linalg.norm(v, axis=-1, keepdims=True)
     return v / np.where(norms == 0.0, 1.0, norms)
+
+
+_normalize = normalize  # internal alias, kept so existing calls read the same
 
 
 def scores(seed: np.ndarray, matrix: np.ndarray, metric: str = "cosine") -> np.ndarray:
@@ -61,14 +66,17 @@ def centrality(matrix: np.ndarray, metric: str = "cosine") -> np.ndarray:
 
 def rank(seed: np.ndarray, matrix: np.ndarray, direction: int = 1,
          limit: int = 10, metric: str = "cosine",
-         correction: np.ndarray | None = None) -> np.ndarray:
+         correction: np.ndarray | None = None,
+         similarity: np.ndarray | None = None) -> np.ndarray:
     """Row indices, best first. direction=-1 ranks most-distant (surprise).
 
     `correction` is subtracted from the scores before sorting — pass
     centrality(matrix) on the surprise axis so the result answers "far from
     THIS seed" instead of "far from everything".
     """
-    ranked = scores(seed, matrix, metric)
+    # `similarity` lets a caller that already computed the scores (e.g. from a
+    # cached unit matrix) avoid normalizing the whole corpus a second time.
+    ranked = scores(seed, matrix, metric) if similarity is None else similarity
     if correction is not None:
         ranked = ranked - correction
     return np.argsort(direction * ranked)[::-1][:limit]

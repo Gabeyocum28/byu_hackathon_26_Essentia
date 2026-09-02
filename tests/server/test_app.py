@@ -55,7 +55,13 @@ def test_search_proxies_deezer(client, monkeypatch):
     hits = [dict(FIXTURE[0])]
     monkeypatch.setattr(app_module.deezer, "search", lambda q, limit=10: hits)
     body = client.get("/search", params={"q": "so what"}).json()
-    assert body == {"results": hits}
+    # Deezer's fields pass through untouched except preview_url, which is
+    # re-pointed at this server so it does not expire in the client's hands
+    # (see _playable); test_search_serves_this_servers_preview_urls covers it.
+    assert [{k: v for k, v in t.items() if k != "preview_url"}
+            for t in body["results"]] == [
+        {k: v for k, v in t.items() if k != "preview_url"} for t in hits
+    ]
 
 
 def test_search_falls_back_to_fixture_when_deezer_down(client, monkeypatch):
@@ -402,3 +408,170 @@ def test_every_served_axis_is_accepted_by_recommend(client):
     served = {a["id"] for a in client.get("/axes").json()["axes"]}
     for axis in served:
         assert client.get("/recommend", params={"track_id": "x", "axis": axis}).status_code == 200
+
+
+# ---- GET /preview + stable preview URLs ----
+#
+# The stored preview_url is a ~15-minute Deezer signature, so every one in the
+# corpus is dead. Tracks must therefore go out pointing at this server, and
+# /preview re-signs at play time.
+
+@pytest.fixture
+def deezer_previews(monkeypatch):
+    """Count re-signing calls so cache behavior is observable."""
+    calls = []
+
+    def fresh(track_id):
+        calls.append(track_id)
+        return f"https://cdnt-preview.dzcdn.net/{track_id}.mp3?hdnea=exp=999"
+
+    monkeypatch.setattr(app_module.deezer, "fresh_preview_url", fresh)
+    return calls
+
+
+def test_preview_redirects_to_freshly_signed_url(client, deezer_previews):
+    r = client.get("/preview/721063", follow_redirects=False)
+    assert r.status_code == 302
+    assert r.headers["location"] == (
+        "https://cdnt-preview.dzcdn.net/721063.mp3?hdnea=exp=999"
+    )
+    assert deezer_previews == ["721063"]
+
+
+def test_preview_is_never_cached_by_the_client(client, deezer_previews):
+    # The target dies in ~15 min; a cached 302 outlives what it points at.
+    r = client.get("/preview/721063", follow_redirects=False)
+    assert r.headers["cache-control"] == "no-store"
+
+
+def test_preview_reuses_the_cached_signature(client, deezer_previews):
+    for _ in range(3):
+        client.get("/preview/721063", follow_redirects=False)
+    assert deezer_previews == ["721063"], "should re-sign once, then cache"
+
+
+def test_preview_404s_when_deezer_has_no_preview(client, monkeypatch):
+    monkeypatch.setattr(app_module.deezer, "fresh_preview_url", lambda t: None)
+    assert client.get("/preview/nope", follow_redirects=False).status_code == 404
+
+
+def test_preview_survives_redis_being_down(monkeypatch, deezer_previews):
+    """No cache is a slower /preview, not a broken one."""
+    def boom():
+        raise RuntimeError("redis down")
+
+    monkeypatch.setattr(store, "client", boom)
+    r = TestClient(app_module.app).get("/preview/721063", follow_redirects=False)
+    assert r.status_code == 302
+
+
+def test_recommend_serves_this_servers_preview_urls(client, seeded_corpus):
+    body = client.get(
+        f"/recommend?track_id={seeded_corpus[0]['track_id']}&axis=sounds_like"
+    ).json()
+    assert body["results"], "expected recommendations"
+    for track in body["results"]:
+        assert track["preview_url"] == (
+            f"http://testserver/preview/{track['track_id']}"
+        )
+        assert "dzcdn.net" not in track["preview_url"]
+
+
+def test_search_serves_this_servers_preview_urls(client, monkeypatch):
+    monkeypatch.setattr(app_module.deezer, "search", lambda q: [dict(FIXTURE[0])])
+    body = client.get("/search?q=miles").json()
+    assert body["results"][0]["preview_url"] == (
+        f"http://testserver/preview/{FIXTURE[0]['track_id']}"
+    )
+
+
+def test_track_shape_is_unchanged_by_the_rewrite(client, seeded_corpus):
+    body = client.get(
+        f"/recommend?track_id={seeded_corpus[0]['track_id']}&axis=sounds_like"
+    ).json()
+    assert set(body["results"][0]) == TRACK_KEYS | {"score"}
+
+
+def test_public_base_url_overrides_the_request_host(client, seeded_corpus,
+                                                    monkeypatch):
+    """Behind a tunnel or proxy the Host header is the internal name."""
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://essencia.example.com/")
+    body = client.get(
+        f"/recommend?track_id={seeded_corpus[0]['track_id']}&axis=sounds_like"
+    ).json()
+    assert body["results"][0]["preview_url"].startswith(
+        "https://essencia.example.com/preview/"
+    )
+
+
+def test_playable_needs_no_stored_preview_url(monkeypatch):
+    """The snapshot ships without preview_url, so the rewrite cannot require one.
+
+    Guarding on preview_url being present meant every corpus track served from
+    a snapshot went out with no way to play it.
+    """
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://host.example")
+    assert app_module._playable({"track_id": "x"})["preview_url"] == (
+        "https://host.example/preview/x"
+    )
+    assert app_module._playable({"track_id": "x", "preview_url": None})[
+        "preview_url"] == "https://host.example/preview/x"
+
+
+def test_playable_leaves_placeholder_rows_alone(monkeypatch):
+    """viz passes None for ids missing from the corpus; those keep a null."""
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://host.example")
+    assert app_module._playable(None) is None
+
+
+def test_recommend_serves_previews_for_snapshot_tracks(client, fake_redis,
+                                                       monkeypatch):
+    """End to end: a track with no stored preview still gets a playable URL."""
+    for i, t in enumerate(FIXTURE[:4]):
+        stripped = {k: v for k, v in t.items() if k != "preview_url"}
+        store.put_track(stripped, fake_features(i / 3.0))
+    body = client.get(
+        f"/recommend?track_id={FIXTURE[0]['track_id']}&axis=sounds_like"
+    ).json()
+    assert body["results"]
+    for track in body["results"]:
+        assert track["preview_url"] == (
+            f"http://testserver/preview/{track['track_id']}"
+        )
+
+
+def test_seed_resigns_when_the_stored_url_is_expired(client, fake_redis,
+                                                     monkeypatch):
+    """The 403 on a stored URL is the norm, not a flake -- re-sign, don't punt."""
+    track = dict(FIXTURE[7])
+    downloaded = []
+
+    def download(url):
+        downloaded.append(url)
+        if "hdnea" not in url:          # the stored, expired one
+            raise OSError("403 Forbidden")
+        return Path("/tmp/x.mp3")
+
+    track["preview_url"] = "https://cdnt-preview.dzcdn.net/dead.mp3"
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(track))
+    monkeypatch.setattr(app_module.deezer, "fresh_preview_url",
+                        lambda t: "https://cdnt-preview.dzcdn.net/live.mp3?hdnea=1")
+    monkeypatch.setattr(app_module, "_download_preview", download)
+    monkeypatch.setattr(app_module, "analyze_track", lambda p: fake_features(0.5))
+
+    body = client.post("/seed", json={"track_id": track["track_id"]}).json()
+    assert body == {"track_id": track["track_id"], "status": "ready"}
+    assert len(downloaded) == 2, "should try stored, then the re-signed URL"
+
+
+def test_seed_does_not_resign_when_the_stored_url_works(client, fake_redis,
+                                                        monkeypatch):
+    """Re-signing costs a Deezer call; a working URL must not trigger one."""
+    track = dict(FIXTURE[7])
+    monkeypatch.setattr(app_module.deezer, "get_track", lambda t: dict(track))
+    monkeypatch.setattr(app_module, "_download_preview", lambda url: Path("/tmp/x.mp3"))
+    monkeypatch.setattr(app_module, "analyze_track", lambda p: fake_features(0.5))
+    monkeypatch.setattr(app_module.deezer, "fresh_preview_url", lambda t: (_ for _ in ()).throw(
+        AssertionError("must not re-sign when the stored URL downloads")))
+
+    client.post("/seed", json={"track_id": track["track_id"]})

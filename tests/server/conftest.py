@@ -39,6 +39,12 @@ class FakeRedis:
     def smembers(self, key):
         return self.sets.get(key, set())
 
+    def scard(self, key):
+        # store.corpus_ids/corpus_size ask for the cardinality first and skip
+        # shipping 90k members when it has not moved; the fake has to answer
+        # it or every caller of those two raises AttributeError.
+        return len(self.sets.get(key, set()))
+
     def lpush(self, key, *values):
         self.lists.setdefault(key, []).extend(values)
 
