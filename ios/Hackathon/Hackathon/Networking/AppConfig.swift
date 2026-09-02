@@ -10,14 +10,14 @@
 import Foundation
 
 enum AppConfig {
-    /// Live Essencia server: Andrew's Mac via Cloudflare tunnel, holding the
-    /// 83k-track corpus. Quick-tunnel hostnames change on every restart, so
-    /// expect this default to churn — override it without editing code by
-    /// setting ESSENTIA_BASE_URL (e.g. to the deployed host at
-    /// http://163.192.48.114:8000).
+    /// Live Essencia server: Cloud Run, holding the 90,491-track corpus.
+    /// Unlike the Cloudflare quick tunnel this replaced, the hostname is
+    /// stable and the server does not depend on anyone's laptop being awake,
+    /// so this default should no longer churn. Override it without editing
+    /// code by setting ESSENTIA_BASE_URL.
     nonisolated static let baseURL: URL = {
         let env = ProcessInfo.processInfo.environment["ESSENTIA_BASE_URL"]?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let raw = (env?.isEmpty == false ? env : nil) ?? "https://tray-planes-defeat-projectors.trycloudflare.com"
+        let raw = (env?.isEmpty == false ? env : nil) ?? "https://essentia-server-438428032266.us-central1.run.app"
         return URL(string: raw)!
     }()
 
