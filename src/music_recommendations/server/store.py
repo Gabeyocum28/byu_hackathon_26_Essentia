@@ -190,3 +190,24 @@ def dequeue_job(timeout: int = 5) -> tuple[str, str] | None:
 
 def clear_attribution_marker(seed_id: str, rec_id: str) -> None:
     client().delete(f"attr:queued:{_attr_pair(seed_id, rec_id)}")
+
+
+# ---- signed preview URL cache (internal; see GET /preview) ----
+#   preview:{id} -> the last freshly signed Deezer preview URL
+#
+# Deezer's signature lives ~15 minutes. Caching for 10 leaves a margin wide
+# enough that a URL handed out at the end of the window still plays, while
+# collapsing repeat plays of the same track onto one API call instead of one
+# per tap -- Deezer throttles, and /preview is on the play path.
+
+_PREVIEW_TTL_S = 600
+
+
+def get_cached_preview(track_id: str) -> str | None:
+    """The cached signed URL for a track, or None if absent or aged out."""
+    return client().get(f"preview:{track_id}")
+
+
+def put_cached_preview(track_id: str, url: str, ttl: int = _PREVIEW_TTL_S) -> None:
+    """Cache one freshly signed URL, expiring well inside its signature."""
+    client().set(f"preview:{track_id}", url, ex=ttl)

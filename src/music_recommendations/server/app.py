@@ -6,6 +6,7 @@ Routes:
   POST /seed         -- mark a track as the seed for recommendations
   GET  /axes         -- list available recommendation axes
   GET  /recommend    -- ranked, scored tracks for a seed + axis
+  GET  /preview/{id} -- 302 to a freshly signed Deezer preview (not contract)
 """
 from __future__ import annotations
 
@@ -19,8 +20,11 @@ import urllib.request
 from pathlib import Path
 
 import numpy as np
+from contextvars import ContextVar
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from starlette.requests import Request
 from typing import Literal, NamedTuple
 
 from contract.features import AXES
@@ -30,6 +34,90 @@ from music_recommendations.server import deezer, store, viz
 from music_recommendations.server.axes import AXIS_FEATURES, BLENDED_AXES
 
 app = FastAPI(title="Essencia")
+
+
+# ---- stable preview URLs ----
+#
+# A Deezer preview URL is not data, it is a 15-minute lease: every one of the
+# 90k stored with the corpus was dead within minutes of being written, and a
+# sampled 3000 were 100% expired. Persisting it was the mistake. So the stored
+# string never reaches a client -- tracks go out pointing at THIS server, at a
+# URL that never expires, and GET /preview re-signs at the moment of play.
+#
+# Contract-safe: contract.md fixes the Track shape and says preview_url is
+# "https://...". It does not say whose host.
+
+_public_base: ContextVar[str] = ContextVar("public_base", default="")
+
+
+class _CaptureBaseURL:
+    """Record this request's own origin so _playable can build absolute URLs.
+
+    Plain ASGI rather than @app.middleware("http"): BaseHTTPMiddleware runs the
+    endpoint in a child task, and a ContextVar set here would land in a context
+    the endpoint may not share. This wrapper runs in the caller's own task.
+    """
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            _public_base.set(str(Request(scope).base_url).rstrip("/"))
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_CaptureBaseURL)
+
+
+def _base() -> str:
+    """Origin to hand clients. PUBLIC_BASE_URL wins: behind a tunnel or a proxy
+    the request's own host header is the internal one, not the reachable one."""
+    return os.environ.get("PUBLIC_BASE_URL", "").rstrip("/") or _public_base.get()
+
+
+def _playable(track: dict | None) -> dict | None:
+    """Swap a track's stored (expired) preview_url for this server's stable one.
+
+    Only rewrites tracks that actually carry a preview: the viz endpoints
+    synthesize placeholder rows with preview_url None for ids missing from
+    Redis, and pointing those at /preview would promise audio that 404s.
+    """
+    if not track or not track.get("preview_url") or not track.get("track_id"):
+        return track
+    base = _base()
+    if not base:
+        return track
+    return {**track, "preview_url": f"{base}/preview/{track['track_id']}"}
+
+
+def _fresh_preview(track_id: str) -> str | None:
+    """A signed, currently-valid preview URL, from cache or from Deezer."""
+    cached = _safe(store.get_cached_preview, track_id)
+    if cached:
+        return cached
+    url = deezer.fresh_preview_url(track_id)
+    if url:
+        _safe(store.put_cached_preview, track_id, url)
+    return url
+
+
+@app.get("/preview/{track_id}")
+def preview(track_id: str) -> RedirectResponse:
+    """302 to a freshly signed Deezer preview URL.
+
+    A redirect, not a proxy: the audio still streams from Deezer's CDN
+    straight to the phone, so this server carries one small request per play
+    rather than 480 KB of mp3 -- which is what makes it viable on a free host.
+
+    no-store because the target dies in ~15 minutes; a cached 302 would send
+    a client to a URL that 403s long after this response looked fine.
+    """
+    url = _fresh_preview(track_id)
+    if url is None:
+        raise HTTPException(404, f"no preview available for track {track_id}")
+    return RedirectResponse(url, status_code=302,
+                            headers={"Cache-Control": "no-store"})
 
 _FIXTURE_PATH = Path(__file__).parents[3] / "contract" / "fixture.json"
 
@@ -75,6 +163,7 @@ def root() -> dict:
             "POST /seed {track_id}",
             "GET /axes",
             "GET /recommend?track_id=<id>&axis=<axis>&limit=<n>",
+            "GET /preview/<id>",
         ],
     }
 
@@ -87,7 +176,7 @@ def get_axes() -> dict:
 @app.get("/search")
 def search(q: str) -> dict:
     try:
-        return {"results": deezer.search(q)}
+        return {"results": [_playable(t) for t in deezer.search(q)]}
     except Exception:
         needle = q.lower()
         hits = [
@@ -116,12 +205,11 @@ def seed(req: SeedRequest) -> dict:
     if track is None:
         raise HTTPException(404, f"track {req.track_id} not found")
 
-    try:
-        mp3 = _download_preview(track["preview_url"])
-    except OSError:
-        # Deezer preview fetch failed -- flake, timeout, 404. urllib raises
-        # OSError subclasses (URLError, socket.timeout included). Don't 500
-        # on a transient failure; hand the job to the Mac embed worker.
+    mp3 = _fetch_preview_audio(req.track_id, track)
+    if mp3 is None:
+        # Deezer preview fetch failed -- flake, timeout, 404, or a signature
+        # that could not be renewed. Don't 500 on a transient failure; hand
+        # the job to the Mac embed worker.
         return _seed_via_worker(req.track_id, track)
 
     try:
@@ -134,6 +222,29 @@ def seed(req: SeedRequest) -> dict:
     finally:
         mp3.unlink(missing_ok=True)
     return ready
+
+
+def _fetch_preview_audio(track_id: str, track: dict) -> "Path | None":
+    """The preview mp3 for analysis, or None if no signature could be had.
+
+    Tries the URL already in hand, then re-signs once. A track that came from
+    /search carries a live signature and downloads first try; one read back
+    from Redis carries a dead one, so the 403 is expected rather than a flake.
+    corpus/download.py takes the same try-then-re-sign shape for the same
+    reason. urllib raises OSError subclasses (URLError, socket.timeout).
+    """
+    # Lazily: re-signing costs a Deezer call, so it must not happen when the
+    # URL already in hand works.
+    for source in (lambda: track.get("preview_url"),
+                   lambda: _fresh_preview(track_id)):
+        url = source()
+        if not url:
+            continue
+        try:
+            return _download_preview(url)
+        except OSError:
+            continue
+    return None
 
 
 # How long /seed waits for the embed worker before failing loudly. Module
@@ -330,7 +441,8 @@ def recommend(track_id: str, axis: str,
             if ids[idx] == track_id:
                 continue
             track = store.get_track(ids[idx])
-            results.append({**track, "score": round(float(fused[idx]) / 100.0, 4)})
+            results.append({**_playable(track), "score":
+                            round(float(fused[idx]) / 100.0, 4)})
             if len(results) == limit:
                 break
     else:
@@ -356,7 +468,7 @@ def recommend(track_id: str, axis: str,
             if ids[idx] == track_id:
                 continue
             track = store.get_track(ids[idx])
-            results.append({**track, "score": float(similarity[idx])})
+            results.append({**_playable(track), "score": float(similarity[idx])})
             if len(results) == limit:
                 break
 
@@ -481,7 +593,7 @@ def viz_map(track_id: str, axis: str,
                 float(correction[idx]) if correction is not None else None,
             )
         recs.append({
-            **(track or {"track_id": rec_id}),
+            **(_playable(track) or {"track_id": rec_id}),
             "score": score,
             "x": float(xy[pos, 0]),
             "y": float(xy[pos, 1]),
@@ -491,7 +603,7 @@ def viz_map(track_id: str, axis: str,
         if len(recs) == limit:
             break
 
-    seed_track = _safe(store.get_track, track_id) or {"track_id": track_id}
+    seed_track = _playable(_safe(store.get_track, track_id)) or {"track_id": track_id}
     seed_pos = position[track_id]
     seed = {
         **seed_track,
@@ -502,7 +614,7 @@ def viz_map(track_id: str, axis: str,
     point_tracks = []
     for point_id, track in zip(emb_ids, _safe(store.get_many_tracks, emb_ids,
                                                 default=[])):
-        point_tracks.append(track or {
+        point_tracks.append(_playable(track) or {
             "track_id": point_id,
             "title": point_id,
             "artist": "Unknown artist",
@@ -557,7 +669,7 @@ def _viz_embedding_corpus_min2() -> tuple[list[str], np.ndarray]:
 
 
 def _viz_track(track_id: str) -> dict:
-    return _safe(store.get_track, track_id) or {
+    return _playable(_safe(store.get_track, track_id)) or {
         "track_id": track_id,
         "title": track_id,
         "artist": "Unknown artist",
@@ -762,7 +874,8 @@ def viz_attribute(seed: str, rec: str) -> dict:
 def _fixture_fallback(track_id: str, limit: int) -> list[dict]:
     tracks = [t for t in _fixture_tracks() if t["track_id"] != track_id][:limit]
     return [
-        {**t, "score": round(0.95 - 0.05 * i, 4)} for i, t in enumerate(tracks)
+        {**_playable(t), "score": round(0.95 - 0.05 * i, 4)}
+        for i, t in enumerate(tracks)
     ]
 
 
