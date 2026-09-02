@@ -30,7 +30,7 @@ from typing import Literal, NamedTuple
 from contract.features import AXES
 from music_recommendations.analysis import analyze_track
 from music_recommendations.analysis.schema import METRICS
-from music_recommendations.server import deezer, store, viz
+from music_recommendations.server import deezer, snapshot, store, viz
 from music_recommendations.server.axes import AXIS_FEATURES, BLENDED_AXES
 
 app = FastAPI(title="Essencia")
@@ -77,13 +77,16 @@ def _base() -> str:
 
 
 def _playable(track: dict | None) -> dict | None:
-    """Swap a track's stored (expired) preview_url for this server's stable one.
+    """Give a track this server's stable preview URL.
 
-    Only rewrites tracks that actually carry a preview: the viz endpoints
-    synthesize placeholder rows with preview_url None for ids missing from
-    Redis, and pointing those at /preview would promise audio that 404s.
+    Keyed on track_id alone, NOT on the track already having a preview_url:
+    the snapshot ships without preview_url (a 15-minute signature is not worth
+    freezing), so requiring one meant every corpus track went out with no way
+    to play it. Callers that synthesize placeholder rows for unknown ids pass
+    None here and fall through to their own literal, which keeps preview_url
+    null rather than promising audio that would 404.
     """
-    if not track or not track.get("preview_url") or not track.get("track_id"):
+    if not track or not track.get("track_id"):
         return track
     base = _base()
     if not base:
@@ -306,6 +309,31 @@ def _rows_for(track_ids: list[str], feature_key: str) -> tuple[list[str], list[n
     return ids, rows
 
 
+def _cold_matrix(corpus: tuple[str, ...],
+                 feature_key: str) -> tuple[list[str], np.ndarray]:
+    """Every row, for a cache that has nothing yet.
+
+    With a snapshot the matrix is already a matrix -- it is read off disk in
+    one piece rather than rebuilt from 90k per-track lookups, which is the
+    whole reason the file exists. Anything seeded since boot lives in the
+    overlay and is appended the same way the Redis path appends new tracks.
+    """
+    if snapshot.active() and feature_key == snapshot.KEY:
+        ids, matrix = snapshot.base_matrix()
+        # Hoisted: as a comprehension condition this rebuilt the whole 90k set
+        # once per candidate, which measured 178 s on a cold /recommend.
+        known_rows = set(ids)
+        extra = [t for t in corpus if t not in known_rows]
+        if extra:
+            more_ids, rows = _rows_for(extra, feature_key)
+            if rows:
+                ids = ids + more_ids
+                matrix = np.vstack([matrix, np.stack(rows).astype(matrix.dtype)])
+        return ids, matrix
+    ids, rows = _rows_for(list(corpus), feature_key)
+    return ids, (np.stack(rows) if rows else np.empty((0, 1)))
+
+
 def _corpus_matrix(corpus: tuple[str, ...], feature_key: str, metric: str,
                    want_correction: bool) -> tuple[list[str], np.ndarray, np.ndarray | None]:
     """The corpus as one matrix, parsing only what it has not seen before."""
@@ -325,8 +353,7 @@ def _build(corpus: tuple[str, ...], feature_key: str, metric: str,
 
     fresh = [i for i in corpus if i not in known]
     if cached is None:
-        ids, rows = _rows_for(list(corpus), feature_key)
-        matrix = np.stack(rows) if rows else np.empty((0, 1))
+        ids, matrix = _cold_matrix(corpus, feature_key)
         cached = _CorpusMatrix(corpus, ids, matrix, None)
     elif fresh:
         ids, rows = _rows_for(fresh, feature_key)

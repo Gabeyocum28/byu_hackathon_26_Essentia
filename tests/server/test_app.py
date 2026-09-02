@@ -504,11 +504,40 @@ def test_public_base_url_overrides_the_request_host(client, seeded_corpus,
     )
 
 
-def test_placeholder_tracks_keep_a_null_preview():
-    """viz synthesizes rows for ids missing from Redis; /preview would 404."""
-    assert app_module._playable({"track_id": "x", "preview_url": None}) == {
-        "track_id": "x", "preview_url": None
-    }
+def test_playable_needs_no_stored_preview_url(monkeypatch):
+    """The snapshot ships without preview_url, so the rewrite cannot require one.
+
+    Guarding on preview_url being present meant every corpus track served from
+    a snapshot went out with no way to play it.
+    """
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://host.example")
+    assert app_module._playable({"track_id": "x"})["preview_url"] == (
+        "https://host.example/preview/x"
+    )
+    assert app_module._playable({"track_id": "x", "preview_url": None})[
+        "preview_url"] == "https://host.example/preview/x"
+
+
+def test_playable_leaves_placeholder_rows_alone(monkeypatch):
+    """viz passes None for ids missing from the corpus; those keep a null."""
+    monkeypatch.setenv("PUBLIC_BASE_URL", "https://host.example")
+    assert app_module._playable(None) is None
+
+
+def test_recommend_serves_previews_for_snapshot_tracks(client, fake_redis,
+                                                       monkeypatch):
+    """End to end: a track with no stored preview still gets a playable URL."""
+    for i, t in enumerate(FIXTURE[:4]):
+        stripped = {k: v for k, v in t.items() if k != "preview_url"}
+        store.put_track(stripped, fake_features(i / 3.0))
+    body = client.get(
+        f"/recommend?track_id={FIXTURE[0]['track_id']}&axis=sounds_like"
+    ).json()
+    assert body["results"]
+    for track in body["results"]:
+        assert track["preview_url"] == (
+            f"http://testserver/preview/{track['track_id']}"
+        )
 
 
 def test_seed_resigns_when_the_stored_url_is_expired(client, fake_redis,
