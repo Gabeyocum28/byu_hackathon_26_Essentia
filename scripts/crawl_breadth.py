@@ -86,10 +86,21 @@ def main() -> None:
                     help="stop widening a genre once it has contributed this many NEW tracks")
     ap.add_argument("--hops", type=int, default=2,
                     help="how far to snowball off each genre's chart artists")
-    ap.add_argument("--per-artist", type=int, default=20)
-    ap.add_argument("--max-per-artist", type=int, default=8,
-                    help="cap tracks kept per artist -- breadth comes from "
-                         "many artists, not many tracks by a few")
+    ap.add_argument("--per-artist", type=int, default=20,
+                    help="tracks fetched per artist (one API call either way)")
+    ap.add_argument("--related", type=int, default=40,
+                    help="related artists pulled per expansion. This is the "
+                         "discovery rate: it governs how many new artists the "
+                         "crawl can reach, and costs the same one API call.")
+    ap.add_argument("--max-per-artist", type=int, default=2,
+                    help="tracks KEPT per artist. Measured at a fixed 1,400 "
+                         "tracks, spreading across 20x more artists cut weak "
+                         "seeds (nothing similar to recommend) from 34%% to "
+                         "28%%. A cap of 2 scores the same as 1 (top-10 0.7323 "
+                         "vs 0.7335) without starving the crawl. Corpus SIZE "
+                         "is the bigger lever though -- each doubling is worth "
+                         "+0.016 against artist spread's +0.007 -- so this "
+                         "must not come at the cost of total volume.")
     ap.add_argument("--out", type=Path, default=OUT)
     args = ap.parse_args()
 
@@ -168,7 +179,7 @@ def main() -> None:
                         added[gid] += 1
                         since_flush += 1
                 if hop < args.hops:
-                    for rel in deezer.related_artists(artist_id, limit=args.per_artist):
+                    for rel in deezer.related_artists(artist_id, limit=args.related):
                         if rel["id"] not in seen_artists:
                             seen_artists.add(rel["id"])
                             q.append((rel["id"], hop + 1))

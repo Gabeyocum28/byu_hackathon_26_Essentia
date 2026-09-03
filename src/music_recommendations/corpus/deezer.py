@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 import urllib.error
@@ -9,7 +10,19 @@ import urllib.parse
 import urllib.request
 
 API = "https://api.deezer.com"
-SLEEP = 0.2  # politeness delay before every API call
+
+# Politeness delay before every API call, which paces how fast the 24 download
+# threads may START requests -- the request itself runs outside the lock, so
+# this is a rate ceiling, not a serialization point.
+#
+# 0.2 s (5/s) was cautious. Measured against the live API, 24 back-to-back
+# track lookups returned zero errors at 5/s, 10/s, 20/s and unpaced, and even
+# unpaced only reached 3.6 req/s because a round trip is ~0.28 s -- latency
+# dominates, not throttling. 0.1 s sits at the 10/s figure Deezer is commonly
+# documented to allow while doubling the ceiling. Raise DEEZER_SLEEP if a long
+# run starts seeing quota errors (which arrive as HTTP 200 with an "error"
+# body, so watch the retry path, not the status line).
+SLEEP = float(os.environ.get("DEEZER_SLEEP", "0.1"))
 TIMEOUT = 20
 RETRIES = 3
 

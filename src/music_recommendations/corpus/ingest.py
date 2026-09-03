@@ -41,8 +41,14 @@ ARCHIVE_DIR = os.environ.get("ARCHIVE_DIR")
 BATCH = 100
 # Previews are ~225 KB each and most need a fresh signed URL first, so this is
 # latency-bound, not bandwidth-bound. deezer._get holds the politeness delay
-# for all of them, which is the real ceiling on how wide this can usefully go.
-DOWNLOAD_THREADS = 24
+# for all of them, which is one ceiling on how wide this can usefully go.
+#
+# The other is the preview CDN, which throttles bursts separately from the API:
+# 24 concurrent fetches were answered 429 for all 60 tracks tried, while single
+# fetches kept succeeding. download._fetch now backs off and retries rather
+# than letting ingest silently skip those tracks, and 12 keeps the burst under
+# whatever the CDN objects to. Override with DOWNLOAD_THREADS to experiment.
+DOWNLOAD_THREADS = int(os.environ.get("DOWNLOAD_THREADS", "12"))
 
 
 # Stored beside the feature vectors rather than wrapping them: the server

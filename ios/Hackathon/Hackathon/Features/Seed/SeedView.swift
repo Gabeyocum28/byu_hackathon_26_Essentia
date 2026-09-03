@@ -34,11 +34,21 @@ final class SeedModel {
         state = .preparing
         do {
             // Absorb the blocking seed analysis while the axes load.
-            async let seeded = api.seed(trackID: seed.trackID)
             async let axesList = api.axes()
-            let seedResponse = try await seeded
+
+            // A combined seed carries several ids; POST /seed takes one track
+            // at a time, so each is prepared in turn. Sequential on purpose:
+            // a cold track costs a preview download and a forward pass on the
+            // server, and firing all of them at once is how a burst of
+            // downloads gets throttled.
+            var allReady = true
+            for trackID in seed.seedIDs {
+                let response = try await api.seed(trackID: trackID)
+                if response.status != "ready" { allReady = false }
+            }
+
             axes = try await axesList
-            state = seedResponse.status == "ready" ? .ready : .unanalyzed
+            state = allReady ? .ready : .unanalyzed
         } catch {
             state = .failed
         }

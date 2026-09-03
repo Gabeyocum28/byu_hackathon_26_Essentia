@@ -484,17 +484,18 @@ def _blended(corpus: tuple[str, ...], seed_features: dict,
 _DUP_HEADROOM = 4
 
 
-def _seen_songs(seed_id: str) -> set:
-    """Song keys already spoken for — starting with the seed's own.
+def _seen_songs(seed_ids: list[str]) -> set:
+    """Song keys already spoken for — starting with the seeds' own.
 
     Seeding "Juicy" and being recommended another pressing of "Juicy" is the
-    most conspicuous form of this bug, and the seed's own row is excluded by
-    track id only, which does not catch its reissues.
+    most conspicuous form of this bug, and the seeds are excluded by track id
+    only, which does not catch their reissues.
     """
     seen = set()
-    key = _song_key(_safe(store.get_track, seed_id))
-    if key:
-        seen.add(key)
+    for track_id in seed_ids:
+        key = _song_key(_safe(store.get_track, track_id))
+        if key:
+            seen.add(key)
     return seen
 
 
@@ -509,24 +510,94 @@ def _keep(track: dict | None, seen: set) -> bool:
     return True
 
 
+def _reseed(track_id: str) -> dict | None:
+    """Analyze a track the store has no features for, or None if that fails.
+
+    The same work POST /seed does, reached from the other side: a client that
+    seeded successfully and then asked for recommendations should not be told
+    "no such track" because the process that answered it is not the process
+    that did the seeding.
+    """
+    track = _safe(store.get_track, track_id)
+    if track is None:
+        try:
+            track = deezer.get_track(track_id)
+        except Exception:
+            track = None
+    if track is None:
+        return None
+    mp3 = _fetch_preview_audio(track_id, track)
+    if mp3 is None:
+        return None
+    try:
+        features = _to_plain(analyze_track(mp3))
+    except (NotImplementedError, ImportError, Exception):
+        return None
+    finally:
+        mp3.unlink(missing_ok=True)
+    _safe(store.put_track, track, features)
+    return features
+
+
+def _seed_ids(track_id: str) -> list[str]:
+    """Split the track_id parameter, which may name several songs.
+
+    Comma-separated rather than a new endpoint or a repeated parameter: a
+    single id is still a valid list of one, so every existing client keeps
+    working untouched and contract.md's Track shape is unaffected.
+    """
+    return list(dict.fromkeys(t.strip() for t in track_id.split(",") if t.strip()))
+
+
+def _seed_vector(seed_ids: list[str], feature_key: str) -> tuple[np.ndarray | None, list[str]]:
+    """The point to rank against, and the ids that actually contributed.
+
+    Several songs become their centroid: each vector is normalized before
+    averaging so a loud track cannot outvote a quiet one, and the mean is
+    normalized again so the result is a direction like any single seed. With
+    one id this returns that id's vector, so there is no separate code path
+    for the ordinary case.
+    """
+    from music_recommendations.server import rank as rank_mod
+
+    vectors, used = [], []
+    for track_id in seed_ids:
+        features = _safe(store.get_features, track_id)
+        if features is None:
+            features = _reseed(track_id)
+        if features is None or feature_key not in features:
+            continue          # unknown or unanalyzable: rank against the rest
+        vectors.append(rank_mod.normalize(_vector(features, feature_key)))
+        used.append(track_id)
+    if not vectors:
+        return None, []
+    return rank_mod.normalize(np.mean(vectors, axis=0)), used
+
+
 @app.get("/recommend")
 def recommend(track_id: str, axis: str,
               limit: int = Query(10, ge=1, le=50)) -> dict:
     if axis not in AXIS_FEATURES and axis not in BLENDED_AXES:
         raise HTTPException(400, f"unknown axis {axis!r}")
 
-    seed_features = _safe(store.get_features, track_id)
+    seeds = _seed_ids(track_id)
     corpus = tuple(_safe(store.corpus_ids, default=[]))
-    ranked_against = [i for i in corpus if i != track_id]
+    seed_set = set(seeds)
+    ranked_against = [i for i in corpus if i not in seed_set]
 
-    if seed_features is None or not ranked_against:
-        results = _fixture_fallback(track_id, limit)
+    feature_key = (BLENDED_AXES[axis] and "embedding") if axis in BLENDED_AXES \
+        else AXIS_FEATURES[axis][0]
+    seed_vec, used = _seed_vector(seeds, feature_key)
+
+    if seed_vec is None or not ranked_against:
+        results = _fixture_fallback(seeds[0] if seeds else track_id, limit)
     elif axis in BLENDED_AXES:
+        seed_features = _safe(store.get_features, used[0])
         ids, fused, parts = _blended(corpus, seed_features, BLENDED_AXES[axis])
         results = []
-        seen = _seen_songs(track_id)
+        seen = _seen_songs(seeds)
         for idx in np.argsort(fused)[::-1]:
-            if ids[idx] == track_id:
+            if ids[idx] in seed_set:
                 continue
             track = store.get_track(ids[idx])
             if not _keep(track, seen):
@@ -536,7 +607,7 @@ def recommend(track_id: str, axis: str,
             if len(results) == limit:
                 break
     else:
-        feature_key, direction = AXIS_FEATURES[axis]
+        _, direction = AXIS_FEATURES[axis]
         from music_recommendations.server import rank as rank_mod
 
         # The right metric depends on how the vector was built, so analysis
@@ -544,7 +615,6 @@ def recommend(track_id: str, axis: str,
         metric = METRICS.get(feature_key, "cosine")
         ids, matrix, correction = _corpus_matrix(corpus, feature_key, metric,
                                                  want_correction=direction == -1)
-        seed_vec = _vector(seed_features, feature_key)
 
         # The seed is a row in the cached matrix like any other, so ask for one
         # extra and drop it — cheaper than rebuilding the matrix per seed.
@@ -556,9 +626,9 @@ def recommend(track_id: str, axis: str,
             metric=metric, correction=correction, similarity=similarity,
         )
         results = []
-        seen = _seen_songs(track_id)
+        seen = _seen_songs(seeds)
         for idx in order:
-            if ids[idx] == track_id:
+            if ids[idx] in seed_set:
                 continue
             track = store.get_track(ids[idx])
             if not _keep(track, seen):

@@ -652,3 +652,87 @@ def test_recommend_still_fills_the_limit_despite_duplicates(client, seeded_corpu
         f"/recommend?track_id={seeded_corpus[0]['track_id']}&axis=sounds_like&limit=3"
     ).json()
     assert len(body["results"]) == 3
+
+
+# ---- multi-seed: rank against the centroid of several songs ----
+#
+# /recommend takes a comma-separated track_id. Several songs are averaged into
+# one direction, which keeps the whole feature to one parameter: no new
+# endpoint, no new Track shape, and a single id is still a list of one.
+
+def test_seed_ids_splits_and_dedups():
+    assert app_module._seed_ids("a,b,c") == ["a", "b", "c"]
+    assert app_module._seed_ids("a") == ["a"]
+    assert app_module._seed_ids(" a , b ") == ["a", "b"]
+    assert app_module._seed_ids("a,a,b") == ["a", "b"], "same song twice must not double its weight"
+    assert app_module._seed_ids("") == []
+
+
+def test_one_seed_is_its_own_centroid(client, fake_redis):
+    """A single id must take the identical path, or every existing client breaks."""
+    for i, t in enumerate(FIXTURE[:5]):
+        store.put_track(t, fake_features(i / 4.0))
+    one = client.get(
+        f"/recommend?track_id={FIXTURE[0]['track_id']}&axis=sounds_like&limit=3"
+    ).json()
+    assert [r["track_id"] for r in one["results"]]
+    assert FIXTURE[0]["track_id"] not in [r["track_id"] for r in one["results"]]
+
+
+def test_centroid_lies_between_its_seeds(client, fake_redis):
+    """Two seeds at opposite ends should rank the middle above either extreme."""
+    import numpy as np
+    from contract.features import FEATURE_KEYS
+
+    def vec(angle):
+        v = [0.0] * FEATURE_KEYS["embedding"]
+        v[0], v[1] = float(np.cos(angle)), float(np.sin(angle))
+        return {"embedding": v}
+
+    store.put_track({**FIXTURE[0], "track_id": "low"}, vec(0.0))
+    store.put_track({**FIXTURE[1], "track_id": "high"}, vec(np.pi / 2))
+    store.put_track({**FIXTURE[2], "track_id": "middle"}, vec(np.pi / 4))
+    store.put_track({**FIXTURE[3], "track_id": "far"}, vec(np.pi))
+
+    body = client.get("/recommend?track_id=low,high&axis=sounds_like&limit=2").json()
+    ids = [r["track_id"] for r in body["results"]]
+    assert ids[0] == "middle", f"centroid of low+high should favour middle, got {ids}"
+
+
+def test_every_seed_is_excluded_from_results(client, fake_redis):
+    for i, t in enumerate(FIXTURE[:6]):
+        store.put_track(t, fake_features(i / 5.0))
+    a, b = FIXTURE[0]["track_id"], FIXTURE[1]["track_id"]
+    body = client.get(f"/recommend?track_id={a},{b}&axis=sounds_like&limit=4").json()
+    ids = [r["track_id"] for r in body["results"]]
+    assert a not in ids and b not in ids
+
+
+def test_unknown_seed_is_skipped_not_fatal(client, fake_redis, monkeypatch):
+    """One dead id must not sink a selection of five."""
+    monkeypatch.setattr(app_module, "_reseed", lambda t: None)
+    for i, t in enumerate(FIXTURE[:5]):
+        store.put_track(t, fake_features(i / 4.0))
+    body = client.get(
+        f"/recommend?track_id={FIXTURE[0]['track_id']},nosuchtrack&axis=sounds_like&limit=3"
+    )
+    assert body.status_code == 200
+    assert body.json()["results"], "should still rank against the seeds it does have"
+
+
+def test_all_seeds_unknown_falls_back(client, fake_redis, monkeypatch):
+    monkeypatch.setattr(app_module, "_reseed", lambda t: None)
+    for i, t in enumerate(FIXTURE[:5]):
+        store.put_track(t, fake_features(i / 4.0))
+    body = client.get("/recommend?track_id=nope,alsonope&axis=sounds_like&limit=3").json()
+    assert body["results"], "fixture fallback still answers rather than erroring"
+
+
+def test_multi_seed_results_keep_the_contract_shape(client, fake_redis):
+    for i, t in enumerate(FIXTURE[:6]):
+        store.put_track(t, fake_features(i / 5.0))
+    body = client.get(
+        f"/recommend?track_id={FIXTURE[0]['track_id']},{FIXTURE[1]['track_id']}"
+        "&axis=sounds_like&limit=3"
+    ).json()
+    assert set(body["results"][0]) == TRACK_KEYS | {"score"}
