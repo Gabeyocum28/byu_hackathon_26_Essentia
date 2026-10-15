@@ -152,6 +152,37 @@ def _safe(fn, *args, default=None):
         return default
 
 
+def _corpus_search(query: str, limit: int = 25) -> list[dict] | None:
+    """Search stored track metadata when Deezer's search API is unavailable.
+
+    None means there is no usable corpus; an empty list means the corpus is
+    available but has no matches for this query.
+    """
+    ids = _safe(store.corpus_ids, default=None)
+    if not ids:
+        return None
+    tracks = _safe(store.get_many_tracks, ids, default=None)
+    if tracks is None:
+        return None
+
+    terms = query.casefold().split()
+    if not terms:
+        return []
+
+    matches = []
+    for track in tracks:
+        if not track:
+            continue
+        searchable = " ".join(
+            str(track.get(field) or "") for field in ("title", "artist", "album")
+        ).casefold()
+        if all(term in searchable for term in terms):
+            matches.append(track)
+            if len(matches) >= limit:
+                break
+    return matches
+
+
 class SeedRequest(BaseModel):
     track_id: str
 
@@ -181,6 +212,9 @@ def search(q: str) -> dict:
     try:
         return {"results": [_playable(t) for t in deezer.search(q)]}
     except Exception:
+        corpus_hits = _corpus_search(q)
+        if corpus_hits is not None:
+            return {"results": [_playable(t) for t in corpus_hits]}
         needle = q.lower()
         hits = [
             t for t in _fixture_tracks()
@@ -188,7 +222,7 @@ def search(q: str) -> dict:
             or needle in t["artist"].lower()
             or needle in t["album"].lower()
         ]
-        return {"results": hits}
+        return {"results": [_playable(t) for t in hits]}
 
 
 @app.post("/seed")

@@ -76,6 +76,25 @@ def test_search_falls_back_to_fixture_when_deezer_down(client, monkeypatch):
     assert all(set(t) == TRACK_KEYS for t in body["results"])
 
 
+def test_search_uses_corpus_when_deezer_is_unavailable(
+        client, fake_redis, monkeypatch):
+    track = dict(FIXTURE[1])
+    store.put_track(track, fake_features(0.5))
+
+    def boom(q, limit=10):
+        raise OSError("Deezer returned 403")
+
+    monkeypatch.setattr(app_module.deezer, "search", boom)
+    response = client.get("/search", params={"q": "miles"})
+
+    assert response.status_code == 200
+    results = response.json()["results"]
+    assert [t["track_id"] for t in results] == [track["track_id"]]
+    assert results[0]["preview_url"] == (
+        f"http://testserver/preview/{track['track_id']}"
+    )
+
+
 # ---- /seed ----
 
 def test_seed_warm_track_is_instant_and_never_analyzes(client, seeded_corpus, monkeypatch):
